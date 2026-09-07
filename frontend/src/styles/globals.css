@@ -1,0 +1,47 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Tokens de cor do dark mode — ver docs/identidade-visual.html (o guia já
+ * definia essas variáveis, só nunca tinham sido ligadas a nada no app).
+ * RGB "sem função" (ex: "245 247 251") porque o Tailwind injeta o alpha
+ * separado via rgb(var(--x) / <alpha-value>) — ver tailwind.config.ts.
+ *
+ * .dark é aplicada no <html> por lib/theme.ts (toggle manual, persistido em
+ * localStorage) — o :root sozinho já cobre quem não mexeu no toggle e tem o
+ * sistema em modo escuro, mas sem a classe não dá pra sobrepor a escolha
+ * manual de volta pro claro com o SO em dark.
+ */
+:root {
+  --color-canvas: 245 247 251;
+  --color-surface: 255 255 255;
+  --color-line: 228 232 241;
+  --color-ink: 19 27 46;
+  --color-ink-soft: 75 85 104;
+  --shadow-card: 0 1px 2px rgba(19, 27, 46, 0.06), 0 8px 24px -12px rgba(19, 27, 46, 0.18);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --color-canvas: 16 20 31;
+    --color-surface: 23 29 44;
+    --color-line: 42 50 71;
+    --color-ink: 238 241 248;
+    --color-ink-soft: 154 164 189;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  }
+}
+
+.dark {
+  --color-canvas: 16 20 31;
+  --color-surface: 23 29 44;
+  --color-line: 42 50 71;
+  --color-ink: 238 241 248;
+  --color-ink-soft: 154 164 189;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+}
+
+body {
+  @apply bg-surface-muted text-ink font-sans transition-colors duration-150;
+}

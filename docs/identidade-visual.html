@@ -1,0 +1,326 @@
+<title>Fluxo — Identidade Visual</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --canvas: #f5f7fb;
+    --surface: #ffffff;
+    --ink: #131b2e;
+    --ink-soft: #4b5568;
+    --line: #e4e8f1;
+    --brand: #3b6fed;
+    --brand-ink: #23409c;
+    --flow: #14b8a6;
+    --signal: #f97316;
+    --shadow: 0 1px 2px rgba(19, 27, 46, 0.06), 0 8px 24px -12px rgba(19, 27, 46, 0.18);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --canvas: #10141f;
+      --surface: #171d2c;
+      --ink: #eef1f8;
+      --ink-soft: #9aa4bd;
+      --line: #2a3247;
+      --brand: #6f95f5;
+      --brand-ink: #cfdcff;
+      --flow: #33d0bd;
+      --signal: #fb923c;
+      --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --canvas: #10141f;
+    --surface: #171d2c;
+    --ink: #eef1f8;
+    --ink-soft: #9aa4bd;
+    --line: #2a3247;
+    --brand: #6f95f5;
+    --brand-ink: #cfdcff;
+    --flow: #33d0bd;
+    --signal: #fb923c;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px -12px rgba(0, 0, 0, 0.6);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1, h2, h3 { font-family: "Unbounded", system-ui, sans-serif; text-wrap: balance; margin: 0; }
+  code, .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+
+  a { color: var(--brand); }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 28px 96px; }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    padding: 72px 28px 56px;
+    border-bottom: 1px solid var(--line);
+    background:
+      radial-gradient(700px 280px at 12% -10%, color-mix(in srgb, var(--brand) 14%, transparent), transparent),
+      radial-gradient(600px 260px at 90% 0%, color-mix(in srgb, var(--flow) 12%, transparent), transparent);
+  }
+  .hero-inner { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
+
+  .mark { display: inline-flex; align-items: center; gap: 14px; }
+  .mark svg { display: block; }
+  .wordmark {
+    font-size: clamp(2.4rem, 5vw, 3.6rem);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+  }
+  .tagline {
+    margin: 18px 0 0;
+    max-width: 46ch;
+    font-size: 1.05rem;
+    color: var(--ink-soft);
+    line-height: 1.55;
+  }
+  .eyebrow {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--flow);
+    margin: 0 0 14px;
+  }
+
+  /* ---------- Board layout (sections as kanban columns) ---------- */
+  section.board-row { padding: 56px 0 0; }
+  .row-head { margin-bottom: 22px; max-width: 62ch; }
+  .row-head h2 { font-size: 1.5rem; }
+  .row-head p { margin: 10px 0 0; color: var(--ink-soft); line-height: 1.6; }
+
+  .columns {
+    display: flex;
+    gap: 18px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    scrollbar-width: thin;
+  }
+  .col {
+    flex: 0 0 268px;
+    background: color-mix(in srgb, var(--surface) 60%, var(--canvas));
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .col-title {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0 2px 4px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 14px;
+  }
+
+  /* swatch cards */
+  .swatch { height: 64px; border-radius: 8px; margin-bottom: 10px; }
+  .swatch-name { font-weight: 600; font-size: 0.92rem; }
+  .swatch-hex { color: var(--ink-soft); font-size: 0.82rem; margin-top: 2px; }
+  .swatch-use { color: var(--ink-soft); font-size: 0.8rem; margin-top: 8px; line-height: 1.5; }
+
+  /* type specimens */
+  .spec-label { font-size: 0.72rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .spec-display { font-family: "Unbounded", sans-serif; font-size: 1.5rem; font-weight: 700; }
+  .spec-body { font-size: 0.98rem; line-height: 1.6; color: var(--ink); }
+  .spec-mono { font-family: "JetBrains Mono", monospace; font-size: 0.85rem; background: var(--canvas); padding: 8px 10px; border-radius: 6px; display: block; }
+
+  /* component previews */
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--brand); color: white; border: none;
+    padding: 9px 16px; border-radius: 8px; font-weight: 600; font-size: 0.9rem;
+    font-family: inherit; cursor: default;
+  }
+  .btn.ghost { background: transparent; color: var(--brand); border: 1px solid var(--line); }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 0.76rem; font-weight: 600; padding: 4px 10px; border-radius: 999px;
+    background: color-mix(in srgb, var(--flow) 16%, transparent); color: var(--flow);
+  }
+  .pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .avatars { display: flex; }
+  .avatar {
+    width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--surface);
+    margin-left: -10px; display: flex; align-items: center; justify-content: center;
+    font-size: 0.7rem; font-weight: 700; color: white;
+  }
+  .avatar:first-child { margin-left: 0; }
+  .mini-card-title { font-weight: 600; font-size: 0.88rem; }
+  .mini-card-desc { color: var(--ink-soft); font-size: 0.8rem; margin-top: 4px; }
+
+  /* do/don't */
+  .dd { display: grid; grid-template-columns: 1fr; gap: 10px; }
+  .dd .card { font-size: 0.86rem; line-height: 1.5; }
+  .dd .card.do { border-left: 3px solid var(--flow); }
+  .dd .card.dont { border-left: 3px solid var(--signal); }
+  .dd b { display: block; margin-bottom: 4px; }
+
+  footer {
+    margin-top: 72px; padding-top: 24px; border-top: 1px solid var(--line);
+    color: var(--ink-soft); font-size: 0.82rem;
+  }
+</style>
+
+<div class="hero">
+  <div class="hero-inner">
+    <p class="eyebrow">Guia de identidade — v1</p>
+    <div class="mark">
+      <svg width="52" height="52" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Símbolo Fluxo">
+        <rect x="4" y="20" width="9" height="28" rx="4" fill="var(--brand)"/>
+        <rect x="21.5" y="8" width="9" height="40" rx="4" fill="var(--flow)"/>
+        <rect x="39" y="28" width="9" height="20" rx="4" fill="var(--signal)"/>
+        <path d="M8 20 C 18 6, 34 6, 43 28" stroke="var(--ink-soft)" stroke-width="1.6" stroke-linecap="round" fill="none" opacity="0.5"/>
+      </svg>
+      <span class="wordmark">fluxo</span>
+    </div>
+    <p class="tagline">Kanban colaborativo em tempo real. Três colunas de altura desigual ligadas por uma curva — o trabalho de cada pessoa, sincronizado em fluxo contínuo.</p>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <section class="board-row">
+    <div class="row-head">
+      <h2>Cor</h2>
+      <p>Azul como base neutra de confiança (é ferramenta de trabalho, não brinquedo); teal como cor de "presença" — tudo relacionado a tempo real e colaboração ao vivo usa essa cor; laranja reservado só para o que realmente é ao vivo agora (cursor de outra pessoa, avatar ativo).</p>
+    </div>
+    <div class="columns">
+      <div class="col">
+        <p class="col-title">Base</p>
+        <div class="card">
+          <div class="swatch" style="background:var(--canvas); border:1px solid var(--line)"></div>
+          <div class="swatch-name">Canvas</div>
+          <div class="swatch-hex mono">#F5F7FB</div>
+          <div class="swatch-use">Fundo do app — a "mesa" onde os quadros ficam.</div>
+        </div>
+        <div class="card">
+          <div class="swatch" style="background:var(--ink)"></div>
+          <div class="swatch-name">Ink</div>
+          <div class="swatch-hex mono">#131B2E</div>
+          <div class="swatch-use">Texto principal. Azulado, nunca preto puro.</div>
+        </div>
+      </div>
+      <div class="col">
+        <p class="col-title">Marca</p>
+        <div class="card">
+          <div class="swatch" style="background:var(--brand)"></div>
+          <div class="swatch-name">Brand</div>
+          <div class="swatch-hex mono">#3B6FED</div>
+          <div class="swatch-use">Ações primárias: botões, links, foco.</div>
+        </div>
+      </div>
+      <div class="col">
+        <p class="col-title">Tempo real</p>
+        <div class="card">
+          <div class="swatch" style="background:var(--flow)"></div>
+          <div class="swatch-name">Flow</div>
+          <div class="swatch-hex mono">#14B8A6</div>
+          <div class="swatch-use">Indicadores de presença, sincronização, status "ao vivo".</div>
+        </div>
+        <div class="card">
+          <div class="swatch" style="background:var(--signal)"></div>
+          <div class="swatch-name">Signal</div>
+          <div class="swatch-hex mono">#F97316</div>
+          <div class="swatch-use">Cursor/avatar de colaborador ativo agora. Usar com moderação.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="board-row">
+    <div class="row-head">
+      <h2>Tipografia</h2>
+      <p>Unbounded no wordmark e títulos — as formas geométricas e um pouco arredondadas remetem a blocos/cards se movendo. Inter no corpo e na interface, por legibilidade em telas pequenas de card. JetBrains Mono para tudo que é "técnico" (variáveis de ambiente, nomes de evento de socket).</p>
+    </div>
+    <div class="columns">
+      <div class="col">
+        <p class="col-title">Display</p>
+        <div class="card">
+          <p class="spec-label">Unbounded · 700</p>
+          <p class="spec-display">Mova. Sincronize.</p>
+        </div>
+      </div>
+      <div class="col">
+        <p class="col-title">Corpo</p>
+        <div class="card">
+          <p class="spec-label">Inter · 400–600</p>
+          <p class="spec-body">Arraste um card para outra lista e todo mundo no quadro vê a mudança na hora — sem recarregar a página.</p>
+        </div>
+      </div>
+      <div class="col">
+        <p class="col-title">Técnica</p>
+        <div class="card">
+          <p class="spec-label">JetBrains Mono</p>
+          <code class="spec-mono">socket.emit("card:moved", payload)</code>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="board-row">
+    <div class="row-head">
+      <h2>Componentes</h2>
+      <p>Pré-visualização real do que o app usa — cards, botões, indicador de presença. Consistente com as classes já definidas em <code class="mono">tailwind.config.ts</code>.</p>
+    </div>
+    <div class="columns">
+      <div class="col">
+        <p class="col-title">Ações</p>
+        <div class="card" style="display:flex; flex-direction:column; gap:10px; align-items:flex-start;">
+          <button class="btn">Criar board</button>
+          <button class="btn ghost">Convidar</button>
+        </div>
+      </div>
+      <div class="col">
+        <p class="col-title">Presença</p>
+        <div class="card" style="display:flex; flex-direction:column; gap:12px;">
+          <div class="avatars">
+            <div class="avatar" style="background:var(--brand)">PS</div>
+            <div class="avatar" style="background:var(--flow)">MA</div>
+            <div class="avatar" style="background:var(--signal)">RC</div>
+          </div>
+          <span class="pill">ao vivo agora</span>
+        </div>
+      </div>
+      <div class="col">
+        <p class="col-title">Card de tarefa</p>
+        <div class="card">
+          <p class="mini-card-title">Configurar autenticação JWT</p>
+          <p class="mini-card-desc">backend · atribuído a você</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="board-row">
+    <div class="row-head">
+      <h2>Uso do símbolo</h2>
+      <p>As três barras representam colunas de um board; a curva é o "fluxo" de trabalho passando por elas. Nunca usar as três barras sem a curva — sozinhas, viram só um ícone de gráfico de barras.</p>
+    </div>
+    <div class="dd">
+      <div class="card do"><b>Certo</b>Símbolo + curva juntos, cores na ordem brand → flow → signal (esquerda pra direita).</div>
+      <div class="card dont"><b>Evitar</b>Recolorir o símbolo com cores fora da paleta, ou usar só as barras sem a curva.</div>
+    </div>
+  </section>
+
+  <footer>Fluxo — guia de identidade v1 · setembro/2026 · ver <code class="mono">PROJECT_SPEC.md</code> para a especificação técnica completa</footer>
+</div>

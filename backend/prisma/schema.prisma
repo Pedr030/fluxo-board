@@ -1,0 +1,76 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// TODO: este é o modelo mínimo para o MVP. Sinta-se livre de evoluir
+// (labels, comentários, anexos, activity log) conforme o roadmap do
+// PROJECT_SPEC.md avançar.
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  password  String
+  avatarUrl String?
+  createdAt DateTime @default(now())
+
+  memberships  BoardMember[]
+  ownedBoards  Board[]       @relation("BoardOwner")
+  cardsCreated Card[]        @relation("CardCreator")
+}
+
+model Board {
+  id        String   @id @default(cuid())
+  title     String
+  ownerId   String
+  owner     User     @relation("BoardOwner", fields: [ownerId], references: [id])
+  createdAt DateTime @default(now())
+
+  members BoardMember[]
+  lists   List[]
+}
+
+enum Role {
+  OWNER
+  MEMBER
+}
+
+model BoardMember {
+  id      String @id @default(cuid())
+  boardId String
+  userId  String
+  role    Role   @default(MEMBER)
+
+  board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@unique([boardId, userId])
+}
+
+model List {
+  id       String @id @default(cuid())
+  title    String
+  position Int
+  boardId  String
+
+  board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  cards Card[]
+}
+
+model Card {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  position    Int
+  listId      String
+  creatorId   String?
+  createdAt   DateTime @default(now())
+
+  list    List  @relation(fields: [listId], references: [id], onDelete: Cascade)
+  creator User? @relation("CardCreator", fields: [creatorId], references: [id])
+}
