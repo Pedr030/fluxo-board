@@ -110,7 +110,7 @@ export function Card({ card }: { card: CardData }) {
       <button
         onClick={() => setConfirmOpen(true)}
         onPointerDown={(e) => e.stopPropagation()}
-        className="absolute right-1 top-1 hidden rounded-card p-1 text-ink-soft transition-colors hover:text-red-600 group-hover:block"
+        className="absolute right-1 top-1 hidden rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover:block"
         aria-label="Excluir card"
       >
         <TrashIcon className="h-3.5 w-3.5" />

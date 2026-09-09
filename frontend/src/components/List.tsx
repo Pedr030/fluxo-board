@@ -82,8 +82,8 @@ export function List({ list }: { list: ListData }) {
   }
 
   return (
-    <div className="group flex w-72 shrink-0 flex-col gap-2 rounded-list border border-surface-border bg-surface/70 p-3">
-      <div className="flex items-center justify-between gap-2">
+    <div className="flex w-72 shrink-0 flex-col gap-2 rounded-list border border-surface-border bg-surface/70 p-3">
+      <div className="group flex items-center justify-between gap-2">
         {editingTitle ? (
           <input
             autoFocus
@@ -103,7 +103,7 @@ export function List({ list }: { list: ListData }) {
         )}
         <button
           onClick={() => setConfirmOpen(true)}
-          className="hidden shrink-0 rounded-card p-1 text-ink-soft transition-colors hover:text-red-600 group-hover:block"
+          className="hidden shrink-0 rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover:block"
           aria-label="Excluir lista"
         >
           <TrashIcon className="h-4 w-4" />

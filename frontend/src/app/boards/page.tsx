@@ -156,7 +156,7 @@ export default function BoardsPage() {
               {board.myRole === "OWNER" && (
                 <button
                   onClick={() => setConfirmingDeleteId(board.id)}
-                  className="hidden shrink-0 rounded-card p-1 text-ink-soft transition-colors hover:text-red-600 group-hover:block"
+                  className="hidden shrink-0 rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover:block"
                   aria-label="Excluir board"
                 >
                   <TrashIcon className="h-4 w-4" />
