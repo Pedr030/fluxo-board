@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
+    "start": "prisma migrate deploy && node dist/index.js",
     "prisma:studio": "prisma studio",
     "pretest": "cross-env DATABASE_URL=postgresql://fluxo:fluxo@localhost:5432/fluxo_test prisma migrate deploy",
     "test": "cross-env DATABASE_URL=postgresql://fluxo:fluxo@localhost:5432/fluxo_test JWT_SECRET=test-secret-key FRONTEND_URL=http://localhost:3000 jest --runInBand"
