@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { deleteCard as apiDeleteCard, updateCard as apiUpdateCard } from "@/lib/api";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { TrashIcon } from "./icons";
 
 export interface CardData {
   id: string;
@@ -47,7 +49,8 @@ export function Card({ card }: { card: CardData }) {
   });
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(card.title);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [titleError, setTitleError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -74,11 +77,14 @@ export function Card({ card }: { card: CardData }) {
 
   async function handleDelete() {
     setDeleteError(null);
+    setDeleting(true);
     try {
       await apiDeleteCard(card.id);
+      setConfirmOpen(false);
     } catch {
-      setConfirmingDelete(false);
       setDeleteError("Não foi possível excluir o card.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -101,33 +107,24 @@ export function Card({ card }: { card: CardData }) {
           )}
         </div>
       </div>
-      {confirmingDelete ? (
-        <div
-          className="absolute right-1 top-1 flex items-center gap-1 rounded-card bg-surface px-1 shadow-card"
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          <button onClick={handleDelete} className="text-xs font-medium text-red-600 hover:underline">
-            Excluir
-          </button>
-          <button
-            onClick={() => setConfirmingDelete(false)}
-            className="text-xs text-ink-soft hover:text-ink"
-          >
-            Cancelar
-          </button>
-        </div>
-      ) : (
-        <button
-          onClick={() => setConfirmingDelete(true)}
-          onPointerDown={(e) => e.stopPropagation()}
-          className="absolute right-1 top-1 hidden text-xs text-ink-soft hover:text-red-600 group-hover:block"
-          aria-label="Excluir card"
-        >
-          ✕
-        </button>
-      )}
+      <button
+        onClick={() => setConfirmOpen(true)}
+        onPointerDown={(e) => e.stopPropagation()}
+        className="absolute right-1 top-1 hidden rounded-card p-1 text-ink-soft transition-colors hover:text-red-600 group-hover:block"
+        aria-label="Excluir card"
+      >
+        <TrashIcon className="h-3.5 w-3.5" />
+      </button>
       {titleError && <p className="text-xs text-red-600 dark:text-red-400">{titleError}</p>}
-      {deleteError && <p className="text-xs text-red-600 dark:text-red-400">{deleteError}</p>}
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Excluir este card?"
+        description="Essa ação não pode ser desfeita."
+        pending={deleting}
+        error={deleteError}
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
 }

@@ -13,8 +13,10 @@ import {
   listBoards,
 } from "@/lib/api";
 import { disconnectSocket } from "@/lib/socket";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { TrashIcon } from "@/components/icons";
 
 /**
  * Lista os boards do usuário logado e permite criar um novo.
@@ -29,6 +31,7 @@ export default function BoardsPage() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
   function load() {
@@ -76,12 +79,15 @@ export default function BoardsPage() {
 
   async function handleDelete(boardId: string) {
     setDeleteError(null);
+    setDeleting(true);
     try {
       await deleteBoard(boardId);
       setBoards((prev) => prev.filter((b) => b.id !== boardId));
-    } catch {
       setConfirmingDeleteId(null);
+    } catch {
       setDeleteError("Não foi possível excluir o board.");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -125,7 +131,6 @@ export default function BoardsPage() {
         </button>
       </form>
       {createError && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{createError}</p>}
-      {deleteError && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{deleteError}</p>}
 
       {loading ? (
         <p className="text-sm text-ink-soft">Carregando...</p>
@@ -143,40 +148,34 @@ export default function BoardsPage() {
           {boards.map((board) => (
             <li
               key={board.id}
-              className="flex items-center gap-2 rounded-card border border-surface-border bg-surface p-3 shadow-card transition-colors hover:border-brand-300"
+              className="group flex items-center gap-2 rounded-card border border-surface-border bg-surface p-3 shadow-card transition-colors hover:border-brand-300"
             >
               <Link href={`/board/${board.id}`} className="flex-1 text-sm text-ink">
                 {board.title}
               </Link>
-              {board.myRole === "OWNER" &&
-                (confirmingDeleteId === board.id ? (
-                  <div className="flex shrink-0 items-center gap-2 text-xs">
-                    <button
-                      onClick={() => handleDelete(board.id)}
-                      className="font-medium text-red-600 hover:underline"
-                    >
-                      Excluir
-                    </button>
-                    <button
-                      onClick={() => setConfirmingDeleteId(null)}
-                      className="text-ink-soft hover:text-ink"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setConfirmingDeleteId(board.id)}
-                    className="shrink-0 text-xs text-ink-soft hover:text-red-600"
-                    aria-label="Excluir board"
-                  >
-                    ✕
-                  </button>
-                ))}
+              {board.myRole === "OWNER" && (
+                <button
+                  onClick={() => setConfirmingDeleteId(board.id)}
+                  className="hidden shrink-0 rounded-card p-1 text-ink-soft transition-colors hover:text-red-600 group-hover:block"
+                  aria-label="Excluir board"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                </button>
+              )}
             </li>
           ))}
         </ul>
       )}
+
+      <ConfirmDialog
+        open={confirmingDeleteId !== null}
+        title={`Excluir o board "${boards.find((b) => b.id === confirmingDeleteId)?.title ?? ""}"?`}
+        description="Todas as listas e cards dele também serão excluídos. Essa ação não pode ser desfeita."
+        pending={deleting}
+        error={deleteError}
+        onConfirm={() => confirmingDeleteId && handleDelete(confirmingDeleteId)}
+        onCancel={() => setConfirmingDeleteId(null)}
+      />
     </main>
   );
 }

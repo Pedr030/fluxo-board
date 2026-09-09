@@ -9,6 +9,8 @@ import {
   updateList as apiUpdateList,
 } from "@/lib/api";
 import { Card, CardData } from "./Card";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { TrashIcon } from "./icons";
 
 export interface ListData {
   id: string;
@@ -30,7 +32,8 @@ export function List({ list }: { list: ListData }) {
   const [creating, setCreating] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(list.title);
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [titleError, setTitleError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -67,16 +70,19 @@ export function List({ list }: { list: ListData }) {
 
   async function handleDeleteList() {
     setDeleteError(null);
+    setDeleting(true);
     try {
       await apiDeleteList(list.id);
+      setConfirmOpen(false);
     } catch {
-      setConfirmingDelete(false);
       setDeleteError("Não foi possível excluir a lista.");
+    } finally {
+      setDeleting(false);
     }
   }
 
   return (
-    <div className="flex w-72 shrink-0 flex-col gap-2 rounded-list border border-surface-border bg-surface/70 p-3">
+    <div className="group flex w-72 shrink-0 flex-col gap-2 rounded-list border border-surface-border bg-surface/70 p-3">
       <div className="flex items-center justify-between gap-2">
         {editingTitle ? (
           <input
@@ -95,33 +101,24 @@ export function List({ list }: { list: ListData }) {
             {list.title}
           </h3>
         )}
-        {confirmingDelete ? (
-          <div className="flex shrink-0 items-center gap-1">
-            <button
-              onClick={handleDeleteList}
-              className="text-xs font-medium text-red-600 hover:underline"
-            >
-              Excluir
-            </button>
-            <button
-              onClick={() => setConfirmingDelete(false)}
-              className="text-xs text-ink-soft hover:text-ink"
-            >
-              Cancelar
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setConfirmingDelete(true)}
-            className="shrink-0 text-xs text-ink-soft hover:text-red-600"
-            aria-label="Excluir lista"
-          >
-            ✕
-          </button>
-        )}
+        <button
+          onClick={() => setConfirmOpen(true)}
+          className="hidden shrink-0 rounded-card p-1 text-ink-soft transition-colors hover:text-red-600 group-hover:block"
+          aria-label="Excluir lista"
+        >
+          <TrashIcon className="h-4 w-4" />
+        </button>
       </div>
       {titleError && <p className="text-xs text-red-600 dark:text-red-400">{titleError}</p>}
-      {deleteError && <p className="text-xs text-red-600 dark:text-red-400">{deleteError}</p>}
+      <ConfirmDialog
+        open={confirmOpen}
+        title={`Excluir a lista "${list.title}"?`}
+        description="Os cards dela também serão excluídos. Essa ação não pode ser desfeita."
+        pending={deleting}
+        error={deleteError}
+        onConfirm={handleDeleteList}
+        onCancel={() => setConfirmOpen(false)}
+      />
       <div ref={setNodeRef} className="flex min-h-[40px] flex-col gap-2">
         <SortableContext items={list.cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
           {list.cards.map((card) => (
