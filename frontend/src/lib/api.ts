@@ -138,6 +138,7 @@ export interface Board {
   title: string;
   ownerId: string;
   createdAt: string;
+  myRole: "OWNER" | "MEMBER";
 }
 
 export interface CardItem {
@@ -157,7 +158,6 @@ export interface ListItem {
 
 export interface BoardDetail extends Board {
   lists: ListItem[];
-  myRole: "OWNER" | "MEMBER";
 }
 
 export interface Member {
@@ -187,6 +187,8 @@ export const createBoard = (title: string) =>
   });
 
 export const getBoard = (id: string) => apiFetch<{ board: BoardDetail }>(`/boards/${id}`);
+
+export const deleteBoard = (id: string) => apiFetch<void>(`/boards/${id}`, { method: "DELETE" });
 
 export const createList = (boardId: string, title: string) =>
   apiFetch<{ list: ListItem }>(`/boards/${boardId}/lists`, {

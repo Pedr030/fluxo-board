@@ -92,6 +92,7 @@ Todas as rotas abaixo (exceto `/auth/*`) exigem header
 | POST | `/lists/:id/cards` | cria card `{ title }` *(a implementar)* |
 | PATCH | `/cards/:id` | edita/move card `{ title?, description?, listId?, position? }` *(a implementar)* |
 | DELETE | `/cards/:id` | remove card *(a implementar)* |
+| DELETE | `/boards/:id` | remove board (só o dono) |
 
 As rotas marcadas "a implementar" ainda não têm arquivo de rota — crie
 seguindo o padrão de `backend/src/routes/board.routes.ts` quando chegar
@@ -110,6 +111,7 @@ com `board:leave` ao desmontar a página.
 | `card:moved` | `{ card, fromListId, toListId }` | `PATCH /cards/:id` (quando `listId`/`position` muda) |
 | `card:updated` | `{ card }` | `PATCH /cards/:id` (título/descrição) |
 | `card:deleted` | `{ cardId, listId }` | `DELETE /cards/:id` |
+| `board:deleted` | `{ boardId }` | `DELETE /boards/:id` |
 
 Stub em `backend/src/sockets/boardSocket.ts` — os handlers de `join`/`leave`
 já existem, os eventos de mutação você adiciona junto com cada rota REST

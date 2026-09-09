@@ -191,6 +191,10 @@ export function Board({ boardId }: { boardId: string }) {
       setOnlineUsers(users);
     }
 
+    function handleBoardDeleted() {
+      setLoadError("Esse board foi excluído pelo dono.");
+    }
+
     socket.on("list:created", handleListCreated);
     socket.on("list:updated", handleListUpdated);
     socket.on("list:deleted", handleListDeleted);
@@ -199,6 +203,7 @@ export function Board({ boardId }: { boardId: string }) {
     socket.on("card:updated", handleCardUpdated);
     socket.on("card:deleted", handleCardDeleted);
     socket.on("presence:update", handlePresenceUpdate);
+    socket.on("board:deleted", handleBoardDeleted);
 
     return () => {
       socket.emit("board:leave", boardId);
@@ -210,6 +215,7 @@ export function Board({ boardId }: { boardId: string }) {
       socket.off("card:updated", handleCardUpdated);
       socket.off("card:deleted", handleCardDeleted);
       socket.off("presence:update", handlePresenceUpdate);
+      socket.off("board:deleted", handleBoardDeleted);
       setOnlineUsers([]);
     };
   }, [boardId]);

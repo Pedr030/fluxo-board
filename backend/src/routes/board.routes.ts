@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middleware/auth.middleware";
 import {
   createBoard,
+  deleteBoard,
   getBoard,
   inviteMember,
   listBoards,
@@ -19,6 +20,7 @@ boardRouter.get("/:id", getBoard);
 boardRouter.post("/:id/invite", inviteMember);
 boardRouter.get("/:id/members", listMembers);
 boardRouter.post("/:id/lists", createList);
+boardRouter.delete("/:id", deleteBoard);
 
 // TODO: PATCH /lists/:id (renomear/reordenar lista) e editar/excluir card
 // entram na etapa de polish do roadmap.

@@ -149,6 +149,35 @@ describe("Socket.io: sincronização em tempo real", () => {
     expect(receivedSomething).toBe(false);
   });
 
+  it("board:deleted chega em tempo real pra quem está na room quando o dono exclui o board", async () => {
+    const tokenOwner = await registerAndGetToken("dona@teste.com");
+    const tokenMember = await registerAndGetToken("membro@teste.com");
+
+    const boardRes = await request(app)
+      .post("/boards")
+      .set("Authorization", `Bearer ${tokenOwner}`)
+      .send({ title: "Board" });
+    const boardId = boardRes.body.board.id;
+
+    await request(app)
+      .post(`/boards/${boardId}/invite`)
+      .set("Authorization", `Bearer ${tokenOwner}`)
+      .send({ email: "membro@teste.com" });
+
+    const member = await connectClient(tokenMember);
+    member.emit("board:join", boardId);
+    await new Promise((r) => setTimeout(r, 150));
+
+    const eventPromise = waitForEvent<{ boardId: string }>(member, "board:deleted");
+
+    await request(app)
+      .delete(`/boards/${boardId}`)
+      .set("Authorization", `Bearer ${tokenOwner}`);
+
+    const payload = await eventPromise;
+    expect(payload.boardId).toBe(boardId);
+  });
+
   it("presence:update mostra quem entrou e reflete quem saiu", async () => {
     const tokenA = await registerAndGetToken("a@teste.com");
     const tokenB = await registerAndGetToken("b@teste.com");

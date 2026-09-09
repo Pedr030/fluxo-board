@@ -27,9 +27,11 @@ describe("POST /boards", () => {
 
     expect(res.status).toBe(201);
     expect(res.body.board.title).toBe("Meu board");
+    expect(res.body.board.myRole).toBe("OWNER");
 
     const listRes = await request(app).get("/boards").set("Authorization", `Bearer ${token}`);
     expect(listRes.body.boards).toHaveLength(1);
+    expect(listRes.body.boards[0].myRole).toBe("OWNER");
   });
 });
 
@@ -160,5 +162,57 @@ describe("POST /boards/:id/invite", () => {
       .set("Authorization", `Bearer ${ownerToken}`)
       .send({ email: "fantasma@teste.com" });
     expect(unknown.status).toBe(404);
+  });
+});
+
+describe("DELETE /boards/:id", () => {
+  it("dono exclui o board com sucesso, e ele some pra todo mundo", async () => {
+    const { token: ownerToken } = await registerUser("dona@teste.com");
+    await registerUser("convidado@teste.com");
+
+    const { body: created } = await request(app)
+      .post("/boards")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ title: "Board" });
+
+    await request(app)
+      .post(`/boards/${created.board.id}/invite`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ email: "convidado@teste.com" });
+
+    const res = await request(app)
+      .delete(`/boards/${created.board.id}`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+    expect(res.status).toBe(204);
+
+    const ownerBoards = await request(app).get("/boards").set("Authorization", `Bearer ${ownerToken}`);
+    expect(ownerBoards.body.boards).toHaveLength(0);
+
+    const { token: guestToken } = await request(app)
+      .post("/auth/login")
+      .send({ email: "convidado@teste.com", password: "senha123" })
+      .then((r) => r.body);
+    const guestBoards = await request(app).get("/boards").set("Authorization", `Bearer ${guestToken}`);
+    expect(guestBoards.body.boards).toHaveLength(0);
+  });
+
+  it("membro comum (não-dono) não pode excluir — 403", async () => {
+    const { token: ownerToken } = await registerUser("dona@teste.com");
+    const { token: memberToken } = await registerUser("membro@teste.com");
+
+    const { body: created } = await request(app)
+      .post("/boards")
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ title: "Board" });
+
+    await request(app)
+      .post(`/boards/${created.board.id}/invite`)
+      .set("Authorization", `Bearer ${ownerToken}`)
+      .send({ email: "membro@teste.com" });
+
+    const res = await request(app)
+      .delete(`/boards/${created.board.id}`)
+      .set("Authorization", `Bearer ${memberToken}`);
+    expect(res.status).toBe(403);
   });
 });

@@ -1,4 +1,5 @@
 import { Response } from "express";
+import { Server } from "socket.io";
 import { z } from "zod";
 import { prisma } from "../prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
@@ -6,14 +7,21 @@ import { isBoardMember } from "../lib/authorization";
 
 /**
  * GET /boards
- * Lista os boards em que o usuário logado é dono ou membro.
+ * Lista os boards em que o usuário logado é dono ou membro. Inclui `myRole`
+ * de cada um (mesma ideia do getBoard) pro frontend decidir se mostra o
+ * botão de excluir, que só o dono pode usar.
  */
 export async function listBoards(req: AuthRequest, res: Response) {
   const boards = await prisma.board.findMany({
     where: { members: { some: { userId: req.userId } } },
     orderBy: { createdAt: "desc" },
+    include: { members: { where: { userId: req.userId }, select: { role: true } } },
   });
-  return res.json({ boards });
+  const withRole = boards.map(({ members, ...board }) => ({
+    ...board,
+    myRole: members[0].role,
+  }));
+  return res.json({ boards: withRole });
 }
 
 const createBoardSchema = z.object({
@@ -44,7 +52,10 @@ export async function createBoard(req: AuthRequest, res: Response) {
     return created;
   });
 
-  return res.status(201).json({ board });
+  // Quem cria é sempre OWNER (ver transação acima) — devolve já com myRole,
+  // no mesmo formato de listBoards/getBoard, pro frontend não precisar
+  // recarregar a lista pra saber que pode excluir o board recém-criado.
+  return res.status(201).json({ board: { ...board, myRole: "OWNER" as const } });
 }
 
 /**
@@ -150,4 +161,33 @@ export async function listMembers(req: AuthRequest, res: Response) {
   members.sort((a, b) => (a.role === b.role ? 0 : a.role === "OWNER" ? -1 : 1));
 
   return res.json({ members });
+}
+
+/**
+ * DELETE /boards/:id
+ * Remove o board (lists, cards e memberships somem junto, via
+ * onDelete: Cascade no schema). Só o OWNER pode excluir — mesmo critério
+ * usado em inviteMember, e faz sentido: é uma ação irreversível.
+ */
+export async function deleteBoard(req: AuthRequest, res: Response) {
+  const boardId = req.params.id;
+
+  const membership = await prisma.boardMember.findUnique({
+    where: { boardId_userId: { boardId, userId: req.userId! } },
+  });
+  if (!membership) {
+    return res.status(403).json({ error: "Você não é membro deste board" });
+  }
+  if (membership.role !== "OWNER") {
+    return res.status(403).json({ error: "Só o dono do board pode excluí-lo" });
+  }
+
+  await prisma.board.delete({ where: { id: boardId } });
+
+  // Avisa quem estiver com o board aberto (ex: outra aba do próprio dono,
+  // ou um membro vendo em tempo real) antes de já não existir mais.
+  const io = req.app.get("io") as Server;
+  io.to(boardId).emit("board:deleted", { boardId });
+
+  return res.status(204).send();
 }

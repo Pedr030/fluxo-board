@@ -3,7 +3,15 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ApiError, Board, clearToken, createBoard, hasToken, listBoards } from "@/lib/api";
+import {
+  ApiError,
+  Board,
+  clearToken,
+  createBoard,
+  deleteBoard,
+  hasToken,
+  listBoards,
+} from "@/lib/api";
 import { disconnectSocket } from "@/lib/socket";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -20,6 +28,8 @@ export default function BoardsPage() {
   const [title, setTitle] = useState("");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   function load() {
     setLoading(true);
@@ -64,6 +74,17 @@ export default function BoardsPage() {
     }
   }
 
+  async function handleDelete(boardId: string) {
+    setDeleteError(null);
+    try {
+      await deleteBoard(boardId);
+      setBoards((prev) => prev.filter((b) => b.id !== boardId));
+    } catch {
+      setConfirmingDeleteId(null);
+      setDeleteError("Não foi possível excluir o board.");
+    }
+  }
+
   function handleLogout() {
     disconnectSocket();
     clearToken();
@@ -104,6 +125,7 @@ export default function BoardsPage() {
         </button>
       </form>
       {createError && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{createError}</p>}
+      {deleteError && <p className="mb-4 text-sm text-red-600 dark:text-red-400">{deleteError}</p>}
 
       {loading ? (
         <p className="text-sm text-ink-soft">Carregando...</p>
@@ -119,13 +141,38 @@ export default function BoardsPage() {
       ) : (
         <ul className="flex flex-col gap-2">
           {boards.map((board) => (
-            <li key={board.id}>
-              <Link
-                href={`/board/${board.id}`}
-                className="block rounded-card border border-surface-border bg-surface p-3 text-sm text-ink shadow-card transition-colors hover:border-brand-300"
-              >
+            <li
+              key={board.id}
+              className="flex items-center gap-2 rounded-card border border-surface-border bg-surface p-3 shadow-card transition-colors hover:border-brand-300"
+            >
+              <Link href={`/board/${board.id}`} className="flex-1 text-sm text-ink">
                 {board.title}
               </Link>
+              {board.myRole === "OWNER" &&
+                (confirmingDeleteId === board.id ? (
+                  <div className="flex shrink-0 items-center gap-2 text-xs">
+                    <button
+                      onClick={() => handleDelete(board.id)}
+                      className="font-medium text-red-600 hover:underline"
+                    >
+                      Excluir
+                    </button>
+                    <button
+                      onClick={() => setConfirmingDeleteId(null)}
+                      className="text-ink-soft hover:text-ink"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setConfirmingDeleteId(board.id)}
+                    className="shrink-0 text-xs text-ink-soft hover:text-red-600"
+                    aria-label="Excluir board"
+                  >
+                    ✕
+                  </button>
+                ))}
             </li>
           ))}
         </ul>
