@@ -82,12 +82,12 @@ export function List({ list }: { list: ListData }) {
   }
 
   return (
-    <div className="flex w-72 shrink-0 flex-col gap-2 rounded-list border border-surface-border bg-surface/70 p-3">
+    <div className="flex w-80 shrink-0 flex-col gap-3 rounded-list border border-surface-border bg-surface/70 p-4">
       <div className="group flex items-center justify-between gap-2">
         {editingTitle ? (
           <input
             autoFocus
-            className="w-full border-b border-brand-300 bg-transparent font-display text-sm font-semibold text-ink outline-none"
+            className="w-full border-b border-brand-300 bg-transparent font-display text-base font-semibold text-ink outline-none"
             value={titleDraft}
             onChange={(e) => setTitleDraft(e.target.value)}
             onBlur={handleSaveTitle}
@@ -96,7 +96,7 @@ export function List({ list }: { list: ListData }) {
         ) : (
           <h3
             onClick={() => setEditingTitle(true)}
-            className="font-display text-sm font-semibold text-ink"
+            className="font-display text-base font-semibold text-ink"
           >
             {list.title}
           </h3>
@@ -119,16 +119,16 @@ export function List({ list }: { list: ListData }) {
         onConfirm={handleDeleteList}
         onCancel={() => setConfirmOpen(false)}
       />
-      <div ref={setNodeRef} className="flex min-h-[40px] flex-col gap-2">
+      <div ref={setNodeRef} className="flex min-h-[40px] flex-col gap-3">
         <SortableContext items={list.cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
           {list.cards.map((card) => (
             <Card key={card.id} card={card} />
           ))}
         </SortableContext>
       </div>
-      <form onSubmit={handleCreateCard} className="flex flex-col gap-1">
+      <form onSubmit={handleCreateCard} className="flex flex-col gap-1.5">
         <input
-          className="rounded-card border border-surface-border bg-surface p-2 text-xs text-ink outline-none transition-colors focus:border-brand-500"
+          className="rounded-card border border-surface-border bg-surface p-2.5 text-sm text-ink outline-none transition-colors focus:border-brand-500"
           placeholder="Novo card"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -136,7 +136,7 @@ export function List({ list }: { list: ListData }) {
         <button
           type="submit"
           disabled={creating}
-          className="rounded-card p-1 text-xs font-medium text-brand-500 transition-colors hover:bg-brand-50 disabled:opacity-60 dark:hover:bg-brand-500/10"
+          className="rounded-card p-1.5 text-sm font-medium text-brand-500 transition-colors hover:bg-brand-50 disabled:opacity-60 dark:hover:bg-brand-500/10"
         >
           {creating ? "Criando..." : "+ Adicionar card"}
         </button>

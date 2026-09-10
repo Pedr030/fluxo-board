@@ -56,16 +56,16 @@ export default function HomePage() {
       <div className="absolute right-4 top-4">
         <ThemeToggle />
       </div>
-      <div className="w-full max-w-sm rounded-card border border-surface-border bg-surface p-8 shadow-card">
-        <div className="mb-8 flex items-center justify-center gap-3">
-          <Logo size={40} />
-          <span className="font-display text-3xl font-bold text-ink">Fluxo</span>
+      <div className="w-full max-w-md rounded-card border border-surface-border bg-surface p-10 shadow-card">
+        <div className="mb-10 flex items-center justify-center gap-3">
+          <Logo size={48} />
+          <span className="font-display text-4xl font-bold text-ink">Fluxo</span>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {mode === "register" && (
             <input
-              className="rounded-card border border-surface-border bg-surface p-2 text-sm text-ink outline-none transition-colors focus:border-brand-500"
+              className="rounded-card border border-surface-border bg-surface p-3 text-base text-ink outline-none transition-colors focus:border-brand-500"
               placeholder="Nome"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -73,7 +73,7 @@ export default function HomePage() {
             />
           )}
           <input
-            className="rounded-card border border-surface-border bg-surface p-2 text-sm text-ink outline-none transition-colors focus:border-brand-500"
+            className="rounded-card border border-surface-border bg-surface p-3 text-base text-ink outline-none transition-colors focus:border-brand-500"
             type="email"
             placeholder="Email"
             value={email}
@@ -82,7 +82,7 @@ export default function HomePage() {
           />
           <div className="relative">
             <input
-              className="w-full rounded-card border border-surface-border bg-surface p-2 pr-9 text-sm text-ink outline-none transition-colors focus:border-brand-500"
+              className="w-full rounded-card border border-surface-border bg-surface p-3 pr-10 text-base text-ink outline-none transition-colors focus:border-brand-500"
               type={showPassword ? "text" : "password"}
               placeholder="Senha"
               value={password}
@@ -94,12 +94,12 @@ export default function HomePage() {
               type="button"
               onClick={() => setShowPassword((v) => !v)}
               aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-soft hover:text-brand-500"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft hover:text-brand-500"
             >
               {showPassword ? (
-                <EyeOffIcon className="h-4 w-4" />
+                <EyeOffIcon className="h-5 w-5" />
               ) : (
-                <EyeIcon className="h-4 w-4" />
+                <EyeIcon className="h-5 w-5" />
               )}
             </button>
           </div>
@@ -109,7 +109,7 @@ export default function HomePage() {
           <button
             type="submit"
             disabled={loading}
-            className="mt-2 rounded-card bg-brand-500 p-2 text-sm font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-60"
+            className="mt-2 rounded-card bg-brand-500 p-3 text-base font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-60"
           >
             {loading ? "Aguarde..." : mode === "login" ? "Entrar" : "Criar conta"}
           </button>
@@ -121,7 +121,7 @@ export default function HomePage() {
             setError(null);
             setMode(mode === "login" ? "register" : "login");
           }}
-          className="mt-4 w-full text-center text-sm text-ink-soft hover:text-brand-500"
+          className="mt-5 w-full text-center text-sm text-ink-soft hover:text-brand-500"
         >
           {mode === "login" ? "Não tem conta? Cadastre-se" : "Já tem conta? Entrar"}
         </button>

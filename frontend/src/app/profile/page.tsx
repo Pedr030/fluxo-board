@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -9,12 +9,18 @@ import {
   changePassword,
   getMe,
   hasToken,
+  removeAvatar,
+  updateAvatar,
   updateProfile,
 } from "@/lib/api";
-import { ArrowLeftIcon, EyeIcon, EyeOffIcon } from "@/components/icons";
+import { Avatar } from "@/components/Avatar";
+import { ArrowLeftIcon, CameraIcon, EyeIcon, EyeOffIcon, TrashIcon } from "@/components/icons";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { notifyProfileUpdated } from "@/lib/socket";
+
+const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+const ACCEPTED_AVATAR_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 /** Input de senha com botão de olho pra mostrar/ocultar o que foi digitado. */
 function PasswordField({
@@ -29,11 +35,11 @@ function PasswordField({
   const [visible, setVisible] = useState(false);
   return (
     <>
-      <label className="mt-2 text-xs font-medium text-ink-soft">{label}</label>
+      <label className="mt-2 text-sm font-medium text-ink-soft">{label}</label>
       <div className="relative">
         <input
           type={visible ? "text" : "password"}
-          className="w-full rounded-card border border-surface-border bg-surface p-2 pr-9 text-sm text-ink outline-none transition-colors focus:border-brand-500"
+          className="w-full rounded-card border border-surface-border bg-surface p-3 pr-10 text-base text-ink outline-none transition-colors focus:border-brand-500"
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />
@@ -41,9 +47,9 @@ function PasswordField({
           type="button"
           onClick={() => setVisible((v) => !v)}
           aria-label={visible ? "Ocultar senha" : "Mostrar senha"}
-          className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-soft hover:text-brand-500"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft hover:text-brand-500"
         >
-          {visible ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
+          {visible ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
         </button>
       </div>
     </>
@@ -63,6 +69,11 @@ export default function ProfilePage() {
   const [name, setName] = useState("");
   const [savingName, setSavingName] = useState(false);
   const [nameStatus, setNameStatus] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [removingAvatar, setRemovingAvatar] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -101,6 +112,47 @@ export default function ProfilePage() {
       router.back();
     } else {
       router.push("/boards");
+    }
+  }
+
+  async function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permite escolher o mesmo arquivo de novo depois
+    if (!file) return;
+
+    setAvatarError(null);
+    if (!ACCEPTED_AVATAR_TYPES.includes(file.type)) {
+      setAvatarError("Formato não suportado — envie JPEG, PNG ou WebP.");
+      return;
+    }
+    if (file.size > MAX_AVATAR_BYTES) {
+      setAvatarError("Arquivo muito grande (máx. 2MB).");
+      return;
+    }
+
+    setUploadingAvatar(true);
+    try {
+      const { user } = await updateAvatar(file);
+      setUser(user);
+      notifyProfileUpdated();
+    } catch {
+      setAvatarError("Não foi possível enviar a foto. Tente de novo.");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
+  async function handleRemoveAvatar() {
+    setAvatarError(null);
+    setRemovingAvatar(true);
+    try {
+      const { user } = await removeAvatar();
+      setUser(user);
+      notifyProfileUpdated();
+    } catch {
+      setAvatarError("Não foi possível remover a foto. Tente de novo.");
+    } finally {
+      setRemovingAvatar(false);
     }
   }
 
@@ -166,40 +218,81 @@ export default function ProfilePage() {
   }
 
   return (
-    <main className="mx-auto max-w-lg p-8">
-      <div className="mb-8 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <Logo size={28} />
-          <h1 className="font-display text-xl font-bold text-ink">Perfil</h1>
+    <main className="mx-auto max-w-2xl p-10">
+      <div className="mb-10 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Logo size={36} />
+          <h1 className="font-display text-2xl font-bold text-ink">Perfil</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <ThemeToggle />
           <button
             onClick={handleBack}
             aria-label="Voltar"
             title="Voltar"
-            className="flex h-8 w-8 items-center justify-center rounded-card border border-surface-border text-ink-soft transition-colors hover:border-brand-300 hover:text-brand-500"
+            className="flex h-10 w-10 items-center justify-center rounded-card border border-surface-border text-ink-soft transition-colors hover:border-brand-300 hover:text-brand-500"
           >
-            <ArrowLeftIcon className="h-4 w-4" />
+            <ArrowLeftIcon className="h-5 w-5" />
           </button>
         </div>
       </div>
 
-      <section className="mb-6 rounded-card border border-surface-border bg-surface p-4 shadow-card">
-        <h2 className="mb-3 font-display text-sm font-semibold text-ink">Dados da conta</h2>
-        <p className="mb-4 text-xs text-ink-soft">{user.email}</p>
+      <section className="mb-8 rounded-card border border-surface-border bg-surface p-6 shadow-card">
+        <h2 className="mb-4 font-display text-base font-semibold text-ink">Dados da conta</h2>
 
-        <form onSubmit={handleSaveName} className="flex flex-col gap-2">
-          <label className="text-xs font-medium text-ink-soft">Nome</label>
+        <div className="mb-6 flex flex-col items-center gap-3">
+          <div className="relative">
+            <Avatar name={user.name} avatarUrl={user.avatarUrl} className="h-32 w-32 text-4xl" />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingAvatar}
+              aria-label="Trocar foto"
+              title="Trocar foto"
+              className="absolute -bottom-1 -right-1 flex h-9 w-9 items-center justify-center rounded-full border-2 border-surface bg-brand-500 text-white transition-colors hover:bg-brand-600 disabled:opacity-60"
+            >
+              <CameraIcon className="h-4 w-4" />
+            </button>
+            {user.avatarUrl && (
+              <button
+                type="button"
+                onClick={handleRemoveAvatar}
+                disabled={removingAvatar}
+                aria-label="Remover foto"
+                title="Remover foto"
+                className="absolute -bottom-1 -left-1 flex h-9 w-9 items-center justify-center rounded-full border-2 border-surface bg-red-600 text-white transition-colors hover:bg-red-700 disabled:opacity-60"
+              >
+                <TrashIcon className="h-4 w-4" />
+              </button>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              onChange={handleAvatarChange}
+              className="hidden"
+            />
+          </div>
+          <div className="text-center">
+            <p className="text-sm text-ink-soft">{user.email}</p>
+            {uploadingAvatar && <p className="mt-1 text-xs text-ink-soft">Enviando foto...</p>}
+            {avatarError && (
+              <p className="mt-1 text-xs text-red-600 dark:text-red-400">{avatarError}</p>
+            )}
+          </div>
+        </div>
+
+        <form onSubmit={handleSaveName} className="flex flex-col gap-2.5">
+          <label className="text-sm font-medium text-ink-soft">Nome</label>
           <input
-            className="rounded-card border border-surface-border bg-surface p-2 text-sm text-ink outline-none transition-colors focus:border-brand-500"
+            className="rounded-card border border-surface-border bg-surface p-3 text-base text-ink outline-none transition-colors focus:border-brand-500"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
           <button
             type="submit"
             disabled={savingName}
-            className="self-start rounded-card bg-brand-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-60"
+            className="self-start rounded-card bg-brand-500 px-5 py-2 text-base font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-60"
           >
             {savingName ? "Salvando..." : "Salvar nome"}
           </button>
@@ -215,9 +308,9 @@ export default function ProfilePage() {
         </form>
       </section>
 
-      <section className="rounded-card border border-surface-border bg-surface p-4 shadow-card">
-        <h2 className="mb-3 font-display text-sm font-semibold text-ink">Trocar senha</h2>
-        <form onSubmit={handleChangePassword} className="flex flex-col gap-2">
+      <section className="rounded-card border border-surface-border bg-surface p-6 shadow-card">
+        <h2 className="mb-4 font-display text-base font-semibold text-ink">Trocar senha</h2>
+        <form onSubmit={handleChangePassword} className="flex flex-col gap-2.5">
           <PasswordField label="Senha atual" value={currentPassword} onChange={setCurrentPassword} />
           <PasswordField label="Nova senha" value={newPassword} onChange={setNewPassword} />
           <PasswordField
@@ -228,7 +321,7 @@ export default function ProfilePage() {
           <button
             type="submit"
             disabled={savingPassword}
-            className="mt-2 self-start rounded-card bg-brand-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-60"
+            className="mt-2 self-start rounded-card bg-brand-500 px-5 py-2 text-base font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-60"
           >
             {savingPassword ? "Salvando..." : "Trocar senha"}
           </button>

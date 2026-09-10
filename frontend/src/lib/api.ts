@@ -248,3 +248,25 @@ export const changePassword = (currentPassword: string, newPassword: string) =>
     method: "PATCH",
     body: JSON.stringify({ currentPassword, newPassword }),
   });
+
+// Não usa apiFetch: ele sempre manda Content-Type: application/json, o que
+// quebraria o multipart/form-data — o navegador precisa definir esse header
+// sozinho (com o boundary certo) quando o body é um FormData.
+export async function updateAvatar(file: File): Promise<{ user: User }> {
+  const formData = new FormData();
+  formData.append("avatar", file);
+
+  const token = getToken();
+  const res = await fetch(`${API_URL}/me/avatar`, {
+    method: "PATCH",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    throw new ApiError(res.status, await res.text());
+  }
+  return res.json();
+}
+
+export const removeAvatar = () => apiFetch<{ user: User }>("/me/avatar", { method: "DELETE" });

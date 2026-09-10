@@ -22,6 +22,7 @@ import {
   listMembers,
   moveCard as apiMoveCard,
 } from "@/lib/api";
+import { Avatar } from "./Avatar";
 import { CardData, CardView } from "./Card";
 import { ArrowLeftIcon, UserIcon } from "./icons";
 import { List, ListData } from "./List";
@@ -38,6 +39,7 @@ import { ThemeToggle } from "./ThemeToggle";
 interface PresenceUser {
   id: string;
   name: string;
+  avatarUrl: string | null;
 }
 
 // Ciclo de cores da marca pros avatares de presença — ver docs/identidade-visual.html,
@@ -330,32 +332,31 @@ export function Board({ boardId }: { boardId: string }) {
           {actionError}
         </div>
       )}
-      <div className="flex items-center justify-between gap-4 p-4 pb-0">
+      <div className="flex items-center justify-between gap-4 p-6 pb-0">
         <Link
           href="/boards"
           aria-label="Voltar pros boards"
           title="Voltar pros boards"
-          className="flex h-8 w-8 items-center justify-center rounded-card border border-surface-border text-ink-soft transition-colors hover:border-brand-300 hover:text-brand-500"
+          className="flex h-10 w-10 items-center justify-center rounded-card border border-surface-border text-ink-soft transition-colors hover:border-brand-300 hover:text-brand-500"
         >
-          <ArrowLeftIcon className="h-4 w-4" />
+          <ArrowLeftIcon className="h-5 w-5" />
         </Link>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           {onlineUsers.length > 0 && (
             <div className="flex items-center gap-2">
               <div className="flex -space-x-2" title={onlineUsers.map((u) => u.name).join(", ")}>
                 {onlineUsers.map((u, i) => (
-                  <div
+                  <Avatar
                     key={u.id}
-                    className={`flex h-7 w-7 items-center justify-center rounded-full border-2 border-surface-muted text-xs font-medium text-white ${
-                      AVATAR_COLORS[i % AVATAR_COLORS.length]
-                    }`}
-                  >
-                    {u.name.charAt(0).toUpperCase()}
-                  </div>
+                    name={u.name}
+                    avatarUrl={u.avatarUrl}
+                    className="h-11 w-11 border-2 border-surface-muted text-base"
+                    colorClassName={AVATAR_COLORS[i % AVATAR_COLORS.length]}
+                  />
                 ))}
               </div>
-              <span className="hidden items-center gap-1.5 rounded-full bg-flow-100 px-2.5 py-1 text-xs font-semibold text-flow-600 dark:bg-flow-500/20 dark:text-flow-400 sm:inline-flex">
+              <span className="hidden items-center gap-1.5 rounded-full bg-flow-100 px-3 py-1.5 text-sm font-semibold text-flow-600 dark:bg-flow-500/20 dark:text-flow-400 sm:inline-flex">
                 <span className="h-1.5 w-1.5 rounded-full bg-flow-500" />
                 ao vivo
               </span>
@@ -365,7 +366,7 @@ export function Board({ boardId }: { boardId: string }) {
           <div className="flex gap-1 rounded-card bg-surface-border/50 p-1">
             <button
               onClick={() => setView("board")}
-              className={`rounded-card px-3 py-1 text-xs font-medium transition-colors ${
+              className={`rounded-card px-4 py-1.5 text-sm font-medium transition-colors ${
                 view === "board" ? "bg-surface text-ink shadow-card" : "text-ink-soft"
               }`}
             >
@@ -373,7 +374,7 @@ export function Board({ boardId }: { boardId: string }) {
             </button>
             <button
               onClick={() => setView("members")}
-              className={`rounded-card px-3 py-1 text-xs font-medium transition-colors ${
+              className={`rounded-card px-4 py-1.5 text-sm font-medium transition-colors ${
                 view === "members" ? "bg-surface text-ink shadow-card" : "text-ink-soft"
               }`}
             >
@@ -386,27 +387,27 @@ export function Board({ boardId }: { boardId: string }) {
             href="/profile"
             aria-label="Perfil"
             title="Perfil"
-            className="flex h-8 w-8 items-center justify-center rounded-card border border-surface-border text-ink-soft transition-colors hover:border-brand-300 hover:text-brand-500"
+            className="flex h-10 w-10 items-center justify-center rounded-card border border-surface-border text-ink-soft transition-colors hover:border-brand-300 hover:text-brand-500"
           >
-            <UserIcon className="h-4 w-4" />
+            <UserIcon className="h-5 w-5" />
           </Link>
         </div>
       </div>
 
       {view === "members" ? (
-        <div className="mx-auto w-full max-w-md p-4">
-          <ul className="flex flex-col gap-2">
+        <div className="mx-auto w-full max-w-xl p-6">
+          <ul className="flex flex-col gap-3">
             {members.map((m) => (
               <li
                 key={m.id}
-                className="flex items-center justify-between rounded-card border border-surface-border bg-surface p-3 text-sm shadow-card"
+                className="flex items-center justify-between rounded-card border border-surface-border bg-surface p-4 text-base shadow-card"
               >
                 <div>
                   <p className="font-medium text-ink">{m.user.name}</p>
-                  <p className="text-xs text-ink-soft">{m.user.email}</p>
+                  <p className="text-sm text-ink-soft">{m.user.email}</p>
                 </div>
                 <span
-                  className={`rounded-card px-2 py-1 text-xs font-medium ${
+                  className={`rounded-card px-3 py-1 text-sm font-medium ${
                     m.role === "OWNER"
                       ? "bg-brand-100 text-brand-700 dark:bg-brand-500/20 dark:text-brand-300"
                       : "bg-surface-muted text-ink-soft"
@@ -419,10 +420,10 @@ export function Board({ boardId }: { boardId: string }) {
           </ul>
 
           {myRole === "OWNER" && (
-            <form onSubmit={handleInvite} className="mt-4 flex gap-2">
+            <form onSubmit={handleInvite} className="mt-5 flex gap-3">
               <input
                 type="email"
-                className="flex-1 rounded-card border border-surface-border bg-surface p-2 text-sm text-ink outline-none transition-colors focus:border-brand-500"
+                className="flex-1 rounded-card border border-surface-border bg-surface p-3 text-base text-ink outline-none transition-colors focus:border-brand-500"
                 placeholder="Convidar por email"
                 value={inviteEmail}
                 onChange={(e) => setInviteEmail(e.target.value)}
@@ -430,7 +431,7 @@ export function Board({ boardId }: { boardId: string }) {
               <button
                 type="submit"
                 disabled={inviting}
-                className="rounded-card bg-flow-500 px-3 text-sm font-medium text-white transition-colors hover:bg-flow-600 disabled:opacity-60"
+                className="rounded-card bg-flow-500 px-4 text-base font-medium text-white transition-colors hover:bg-flow-600 disabled:opacity-60"
               >
                 Convidar
               </button>
@@ -453,14 +454,14 @@ export function Board({ boardId }: { boardId: string }) {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <main className="flex flex-1 gap-4 overflow-x-auto p-4">
+          <main className="flex flex-1 gap-5 overflow-x-auto p-6">
             {lists.map((list) => (
               <List key={list.id} list={list} />
             ))}
 
-            <form onSubmit={handleCreateList} className="flex w-72 shrink-0 flex-col gap-2">
+            <form onSubmit={handleCreateList} className="flex w-80 shrink-0 flex-col gap-2">
               <input
-                className="rounded-card border border-surface-border bg-surface p-2 text-sm text-ink outline-none transition-colors focus:border-brand-500"
+                className="rounded-card border border-surface-border bg-surface p-3 text-base text-ink outline-none transition-colors focus:border-brand-500"
                 placeholder="Nova lista"
                 value={newListTitle}
                 onChange={(e) => setNewListTitle(e.target.value)}
@@ -468,7 +469,7 @@ export function Board({ boardId }: { boardId: string }) {
               <button
                 type="submit"
                 disabled={creatingList}
-                className="rounded-card bg-brand-500 p-2 text-sm font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-60"
+                className="rounded-card bg-brand-500 p-3 text-base font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-60"
               >
                 {creatingList ? "Criando..." : "+ Adicionar lista"}
               </button>

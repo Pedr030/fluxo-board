@@ -22,7 +22,7 @@ export interface CardData {
  */
 export function CardView({ card }: { card: CardData }) {
   return (
-    <div className="rounded-card border border-surface-border bg-surface p-3 text-sm font-medium text-ink shadow-card">
+    <div className="rounded-card border border-surface-border bg-surface p-4 text-base font-medium text-ink shadow-card">
       {card.title}
     </div>
   );
@@ -91,11 +91,11 @@ export function Card({ card }: { card: CardData }) {
   return (
     <div ref={setNodeRef} style={style} className="group relative">
       <div {...attributes} {...listeners} className="cursor-grab touch-none active:cursor-grabbing">
-        <div className="rounded-card border border-surface-border bg-surface p-3 pr-6 text-sm font-medium text-ink shadow-card transition-shadow hover:shadow-none">
+        <div className="rounded-card border border-surface-border bg-surface p-4 pr-8 text-base font-medium text-ink shadow-card transition-shadow hover:shadow-none">
           {editing ? (
             <input
               autoFocus
-              className="w-full border-b border-brand-300 bg-transparent text-sm font-medium text-ink outline-none"
+              className="w-full border-b border-brand-300 bg-transparent text-base font-medium text-ink outline-none"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onBlur={handleSaveTitle}

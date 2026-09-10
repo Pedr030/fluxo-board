@@ -14,6 +14,7 @@ import {
   listBoards,
 } from "@/lib/api";
 import { disconnectSocket } from "@/lib/socket";
+import { Avatar } from "@/components/Avatar";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -34,7 +35,7 @@ export default function BoardsPage() {
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [userName, setUserName] = useState("");
+  const [me, setMe] = useState<{ name: string; avatarUrl: string | null } | null>(null);
 
   function load() {
     setLoading(true);
@@ -63,7 +64,7 @@ export default function BoardsPage() {
     // Só pro avatar do cabeçalho — se falhar, fica sem inicial, não é
     // crítico o bastante pra virar tela de erro.
     getMe()
-      .then(({ user }) => setUserName(user.name))
+      .then(({ user }) => setMe({ name: user.name, avatarUrl: user.avatarUrl }))
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
@@ -105,36 +106,36 @@ export default function BoardsPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl p-8">
-      <div className="mb-8 flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <Logo size={28} />
-          <h1 className="font-display text-xl font-bold text-ink">Seus boards</h1>
+    <main className="mx-auto max-w-4xl p-10">
+      <div className="mb-10 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Logo size={36} />
+          <h1 className="font-display text-2xl font-bold text-ink">Seus boards</h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           <ThemeToggle />
           <Link
             href="/profile"
             aria-label="Perfil"
             title="Perfil"
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            className="transition-opacity hover:opacity-90"
           >
-            {userName ? userName.charAt(0).toUpperCase() : "?"}
+            <Avatar name={me?.name ?? "?"} avatarUrl={me?.avatarUrl} className="h-10 w-10 text-base" />
           </Link>
           <button
             onClick={handleLogout}
             aria-label="Sair"
             title="Sair"
-            className="rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600"
+            className="rounded-full p-2 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600"
           >
-            <LogoutIcon className="h-5 w-5" />
+            <LogoutIcon className="h-6 w-6" />
           </button>
         </div>
       </div>
 
-      <form onSubmit={handleCreate} className="mb-2 flex gap-2">
+      <form onSubmit={handleCreate} className="mb-3 flex gap-3">
         <input
-          className="flex-1 rounded-card border border-surface-border bg-surface p-2 text-sm text-ink outline-none transition-colors focus:border-brand-500"
+          className="flex-1 rounded-card border border-surface-border bg-surface p-3 text-base text-ink outline-none transition-colors focus:border-brand-500"
           placeholder="Título do novo board"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -142,7 +143,7 @@ export default function BoardsPage() {
         <button
           type="submit"
           disabled={creating}
-          className="rounded-card bg-brand-500 px-4 text-sm font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-60"
+          className="rounded-card bg-brand-500 px-6 text-base font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-60"
         >
           {creating ? "Criando..." : "Criar"}
         </button>
@@ -161,13 +162,13 @@ export default function BoardsPage() {
       ) : boards.length === 0 ? (
         <p className="text-sm text-ink-soft">Nenhum board ainda — crie o primeiro acima.</p>
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-3">
           {boards.map((board) => (
             <li
               key={board.id}
-              className="group flex items-center gap-2 rounded-card border border-surface-border bg-surface p-3 shadow-card transition-colors hover:border-brand-300"
+              className="group flex items-center gap-2 rounded-card border border-surface-border bg-surface p-4 shadow-card transition-colors hover:border-brand-300"
             >
-              <Link href={`/board/${board.id}`} className="flex-1 text-sm text-ink">
+              <Link href={`/board/${board.id}`} className="flex-1 text-base text-ink">
                 {board.title}
               </Link>
               {board.myRole === "OWNER" && (
