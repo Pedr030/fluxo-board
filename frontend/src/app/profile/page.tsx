@@ -13,6 +13,7 @@ import {
   updateAvatar,
   updateProfile,
 } from "@/lib/api";
+import { AccountDeletionSection } from "@/components/AccountDeletionSection";
 import { Avatar } from "@/components/Avatar";
 import { ArrowLeftIcon, CameraIcon, EyeIcon, EyeOffIcon, TrashIcon } from "@/components/icons";
 import { Logo } from "@/components/Logo";
@@ -338,6 +339,10 @@ export default function ProfilePage() {
           )}
         </form>
       </section>
+
+      <div className="mt-8">
+        <AccountDeletionSection userId={user.id} />
+      </div>
     </main>
   );
 }

@@ -1,5 +1,6 @@
 import { Response } from "express";
 import bcrypt from "bcryptjs";
+import { Server } from "socket.io";
 import { z } from "zod";
 import { prisma } from "../prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
@@ -97,4 +98,100 @@ export async function deleteAvatar(req: AuthRequest, res: Response) {
     data: { avatarUrl: null },
   });
   return res.json({ user: toPublicUser(user) });
+}
+
+const deleteAccountSchema = z.object({
+  resolutions: z
+    .array(
+      z.object({
+        boardId: z.string(),
+        action: z.enum(["transfer", "delete"]),
+        newOwnerId: z.string().optional(),
+      })
+    )
+    .default([]),
+});
+
+/**
+ * DELETE /me  { resolutions: [{ boardId, action: "transfer"|"delete", newOwnerId? }] }
+ *
+ * Excluir a conta não pode simplesmente apagar o User: ele é dono de boards
+ * (Board.ownerId não aceita null), e a FK falharia. Por board que a pessoa
+ * é dona:
+ * - só ela no board → exclui direto, sem perguntar (não tem pra quem
+ *   transferir, e é o combinado com o usuário).
+ * - tem outro membro → PRECISA de uma resolução no corpo da requisição
+ *   ("transfer" pra outro membro existente, ou "delete"). Confere aqui de
+ *   novo mesmo o frontend já forçando a escolha — nunca confia só na UI.
+ *
+ * Board que a pessoa só é MEMBRO comum (não dona) some sozinho: o
+ * onDelete: Cascade em BoardMember.user cuida disso quando o User é
+ * apagado no fim da transação.
+ */
+export async function deleteAccount(req: AuthRequest, res: Response) {
+  const parsed = deleteAccountSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const userId = req.userId!;
+  const resolutionByBoard = new Map(parsed.data.resolutions.map((r) => [r.boardId, r]));
+
+  const ownedBoards = await prisma.board.findMany({
+    where: { ownerId: userId },
+    include: { members: true },
+  });
+
+  for (const board of ownedBoards) {
+    const soloOwner = board.members.length <= 1;
+    if (soloOwner) continue;
+
+    const resolution = resolutionByBoard.get(board.id);
+    if (!resolution) {
+      return res.status(400).json({
+        error: `Resolva o board "${board.title}" antes de continuar (transferir ou excluir)`,
+      });
+    }
+    if (resolution.action === "transfer") {
+      const isMember = board.members.some((m) => m.userId === resolution.newOwnerId);
+      if (!isMember) {
+        return res.status(400).json({
+          error: `Membro inválido pra transferir o board "${board.title}"`,
+        });
+      }
+    }
+  }
+
+  const deletedBoardIds: string[] = [];
+
+  await prisma.$transaction(async (tx) => {
+    for (const board of ownedBoards) {
+      const resolution = resolutionByBoard.get(board.id);
+      const soloOwner = board.members.length <= 1;
+
+      if (soloOwner || resolution?.action === "delete") {
+        await tx.board.delete({ where: { id: board.id } });
+        deletedBoardIds.push(board.id);
+      } else if (resolution?.action === "transfer" && resolution.newOwnerId) {
+        await tx.board.update({
+          where: { id: board.id },
+          data: { ownerId: resolution.newOwnerId },
+        });
+        await tx.boardMember.update({
+          where: { boardId_userId: { boardId: board.id, userId: resolution.newOwnerId } },
+          data: { role: "OWNER" },
+        });
+      }
+    }
+
+    await tx.user.delete({ where: { id: userId } });
+  });
+
+  // Só depois de tudo persistido — quem estiver com algum desses boards
+  // aberto vê a exclusão em tempo real, mesma regra de sempre.
+  const io = req.app.get("io") as Server;
+  for (const boardId of deletedBoardIds) {
+    io.to(boardId).emit("board:deleted", { boardId });
+  }
+
+  return res.status(204).send();
 }

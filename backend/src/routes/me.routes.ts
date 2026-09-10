@@ -5,6 +5,7 @@ import { matchesImageSignature } from "../lib/imageSignature";
 import { sensitiveActionLimiter } from "../middleware/rateLimit";
 import {
   changePassword,
+  deleteAccount,
   deleteAvatar,
   getMe,
   updateAvatar,
@@ -57,3 +58,4 @@ meRouter.patch("/", updateProfile);
 meRouter.patch("/password", sensitiveActionLimiter, changePassword);
 meRouter.patch("/avatar", sensitiveActionLimiter, uploadAvatarFile, updateAvatar);
 meRouter.delete("/avatar", deleteAvatar);
+meRouter.delete("/", sensitiveActionLimiter, deleteAccount);

@@ -47,7 +47,11 @@ model BoardMember {
   role    Role   @default(MEMBER)
 
   board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id])
+  // onDelete: Cascade aqui (e não em Board.owner) é proposital — excluir a
+  // conta precisa primeiro transferir ou excluir cada board que a pessoa é
+  // dona (ver deleteAccount em me.controller.ts); só a participação como
+  // membro comum some sozinha.
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([boardId, userId])
 }
@@ -71,6 +75,9 @@ model Card {
   creatorId   String?
   createdAt   DateTime @default(now())
 
-  list    List  @relation(fields: [listId], references: [id], onDelete: Cascade)
-  creator User? @relation("CardCreator", fields: [creatorId], references: [id])
+  list List @relation(fields: [listId], references: [id], onDelete: Cascade)
+  // SetNull, não Cascade: excluir a conta de quem criou um card não deveria
+  // apagar o card em si (que pode estar num board de outra pessoa) — só
+  // perde a atribuição de quem criou.
+  creator User? @relation("CardCreator", fields: [creatorId], references: [id], onDelete: SetNull)
 }

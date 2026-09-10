@@ -270,3 +270,15 @@ export async function updateAvatar(file: File): Promise<{ user: User }> {
 }
 
 export const removeAvatar = () => apiFetch<{ user: User }>("/me/avatar", { method: "DELETE" });
+
+export interface AccountDeletionResolution {
+  boardId: string;
+  action: "transfer" | "delete";
+  newOwnerId?: string;
+}
+
+export const deleteAccount = (resolutions: AccountDeletionResolution[]) =>
+  apiFetch<void>("/me", {
+    method: "DELETE",
+    body: JSON.stringify({ resolutions }),
+  });
