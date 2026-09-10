@@ -10,13 +10,20 @@
     "pretest": "cross-env DATABASE_URL=postgresql://fluxo:fluxo@localhost:5432/fluxo_test prisma migrate deploy",
     "test": "cross-env DATABASE_URL=postgresql://fluxo:fluxo@localhost:5432/fluxo_test JWT_SECRET=test-secret-key FRONTEND_URL=http://localhost:3000 jest --runInBand"
   },
+  "overrides": {
+    "qs": "^6.16.0"
+  },
   "dependencies": {
     "@prisma/client": "^5.20.0",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "express-async-errors": "^3.1.1",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.2",
+    "multer": "^2.3.0",
     "socket.io": "^4.7.5",
     "zod": "^3.23.8"
   },
@@ -26,6 +33,7 @@
     "@types/express": "^4.17.21",
     "@types/jest": "^30.0.0",
     "@types/jsonwebtoken": "^9.0.6",
+    "@types/multer": "^2.2.0",
     "@types/node": "^20.14.0",
     "@types/supertest": "^7.2.1",
     "cross-env": "^10.1.0",
