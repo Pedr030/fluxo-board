@@ -178,6 +178,43 @@ describe("Socket.io: sincronização em tempo real", () => {
     expect(payload.boardId).toBe(boardId);
   });
 
+  it("profile:updated atualiza o nome na presença ao vivo sem precisar reconectar", async () => {
+    const tokenA = await registerAndGetToken("a@teste.com");
+    const tokenB = await registerAndGetToken("b@teste.com");
+
+    const boardRes = await request(app)
+      .post("/boards")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ title: "Board" });
+    const boardId = boardRes.body.board.id;
+    await request(app)
+      .post(`/boards/${boardId}/invite`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ email: "b@teste.com" });
+
+    const clientA = await connectClient(tokenA);
+    const clientB = await connectClient(tokenB);
+
+    clientA.emit("board:join", boardId);
+    await new Promise((r) => setTimeout(r, 100));
+    clientB.emit("board:join", boardId);
+    await new Promise((r) => setTimeout(r, 150));
+
+    // A troca o nome via REST (equivalente ao PATCH /me da tela de Perfil)
+    // e avisa o próprio socket — B (que está vendo a presença) deve
+    // receber o nome novo sem que A precise reconectar.
+    await request(app)
+      .patch("/me")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ name: "A renomeada" });
+
+    const updatePromise = waitForEvent<{ users: { name: string }[] }>(clientB, "presence:update");
+    clientA.emit("profile:updated");
+    const payload = await updatePromise;
+
+    expect(payload.users.map((u) => u.name).sort()).toEqual(["A renomeada", "b"]);
+  });
+
   it("presence:update mostra quem entrou e reflete quem saiu", async () => {
     const tokenA = await registerAndGetToken("a@teste.com");
     const tokenB = await registerAndGetToken("b@teste.com");

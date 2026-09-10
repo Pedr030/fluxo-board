@@ -9,6 +9,7 @@ import {
   clearToken,
   createBoard,
   deleteBoard,
+  getMe,
   hasToken,
   listBoards,
 } from "@/lib/api";
@@ -16,7 +17,7 @@ import { disconnectSocket } from "@/lib/socket";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { TrashIcon } from "@/components/icons";
+import { LogoutIcon, TrashIcon } from "@/components/icons";
 
 /**
  * Lista os boards do usuário logado e permite criar um novo.
@@ -33,6 +34,7 @@ export default function BoardsPage() {
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [userName, setUserName] = useState("");
 
   function load() {
     setLoading(true);
@@ -58,6 +60,11 @@ export default function BoardsPage() {
       return;
     }
     load();
+    // Só pro avatar do cabeçalho — se falhar, fica sem inicial, não é
+    // crítico o bastante pra virar tela de erro.
+    getMe()
+      .then(({ user }) => setUserName(user.name))
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
@@ -106,11 +113,21 @@ export default function BoardsPage() {
         </div>
         <div className="flex items-center gap-2">
           <ThemeToggle />
+          <Link
+            href="/profile"
+            aria-label="Perfil"
+            title="Perfil"
+            className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-500 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          >
+            {userName ? userName.charAt(0).toUpperCase() : "?"}
+          </Link>
           <button
             onClick={handleLogout}
-            className="rounded-card border border-surface-border px-3 py-1.5 text-sm text-ink-soft transition-colors hover:border-brand-300 hover:text-brand-500"
+            aria-label="Sair"
+            title="Sair"
+            className="rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600"
           >
-            Sair
+            <LogoutIcon className="h-5 w-5" />
           </button>
         </div>
       </div>

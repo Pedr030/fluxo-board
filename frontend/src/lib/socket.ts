@@ -27,3 +27,14 @@ export function disconnectSocket() {
   socket?.disconnect();
   socket = null;
 }
+
+/**
+ * Avisa o servidor que o nome mudou, pra ele atualizar a presença ao vivo
+ * de quem estiver com algum board aberto (ver boardSocket.ts). Acessa o
+ * singleton direto (não getSocket()) de propósito: só emite se já existir
+ * uma conexão — chamar isso da tela de Perfil não deveria criar um socket
+ * novo à toa pra quem nunca abriu nenhum board nessa aba.
+ */
+export function notifyProfileUpdated() {
+  socket?.emit("profile:updated");
+}

@@ -234,3 +234,17 @@ export const inviteMember = (boardId: string, email: string) =>
 
 export const listMembers = (boardId: string) =>
   apiFetch<{ members: Member[] }>(`/boards/${boardId}/members`);
+
+export const getMe = () => apiFetch<{ user: User }>("/me");
+
+export const updateProfile = (name: string) =>
+  apiFetch<{ user: User }>("/me", {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+
+export const changePassword = (currentPassword: string, newPassword: string) =>
+  apiFetch<void>("/me/password", {
+    method: "PATCH",
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });

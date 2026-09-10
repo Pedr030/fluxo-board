@@ -23,6 +23,7 @@ import {
   moveCard as apiMoveCard,
 } from "@/lib/api";
 import { CardData, CardView } from "./Card";
+import { ArrowLeftIcon, UserIcon } from "./icons";
 import { List, ListData } from "./List";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -330,8 +331,13 @@ export function Board({ boardId }: { boardId: string }) {
         </div>
       )}
       <div className="flex items-center justify-between gap-4 p-4 pb-0">
-        <Link href="/boards" className="text-sm text-ink-soft hover:text-brand-500">
-          ← Voltar
+        <Link
+          href="/boards"
+          aria-label="Voltar pros boards"
+          title="Voltar pros boards"
+          className="flex h-8 w-8 items-center justify-center rounded-card border border-surface-border text-ink-soft transition-colors hover:border-brand-300 hover:text-brand-500"
+        >
+          <ArrowLeftIcon className="h-4 w-4" />
         </Link>
 
         <div className="flex items-center gap-3">
@@ -376,6 +382,14 @@ export function Board({ boardId }: { boardId: string }) {
           </div>
 
           <ThemeToggle />
+          <Link
+            href="/profile"
+            aria-label="Perfil"
+            title="Perfil"
+            className="flex h-8 w-8 items-center justify-center rounded-card border border-surface-border text-ink-soft transition-colors hover:border-brand-300 hover:text-brand-500"
+          >
+            <UserIcon className="h-4 w-4" />
+          </Link>
         </div>
       </div>
 

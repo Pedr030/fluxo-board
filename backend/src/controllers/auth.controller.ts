@@ -14,8 +14,14 @@ function signToken(userId: string) {
   return jwt.sign({ userId }, process.env.JWT_SECRET!, { expiresIn: "7d" });
 }
 
-// Remove o hash da senha antes de devolver o usuário pro cliente.
-function toPublicUser(user: { id: string; name: string; email: string; avatarUrl: string | null }) {
+// Remove o hash da senha antes de devolver o usuário pro cliente. Exportado
+// porque me.controller.ts usa o mesmo formato pra GET /me e afins.
+export function toPublicUser(user: {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl: string | null;
+}) {
   return { id: user.id, name: user.name, email: user.email, avatarUrl: user.avatarUrl };
 }
 

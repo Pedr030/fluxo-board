@@ -63,7 +63,11 @@ export function registerBoardSocket(io: Server) {
   });
 
   io.on("connection", (socket: Socket) => {
-    const user = socket.data.user as PresenceUser;
+    // `let`, não `const`: profile:updated troca esse valor quando o nome
+    // muda, e board:join precisa enxergar a versão atualizada (não a
+    // capturada só na conexão) pra quem entra num board novo depois de
+    // ter mudado o nome já ver o nome certo também.
+    let currentUser = socket.data.user as PresenceUser;
 
     socket.on("board:join", async (boardId: string) => {
       // Mesma checagem que toda rota REST já faz (isBoardMember) — sem
@@ -71,20 +75,43 @@ export function registerBoardSocket(io: Server) {
       // qualquer conta) conseguia entrar na room de um board que não é
       // dele só sabendo o id, e ver presença/eventos ao vivo de gente que
       // nem convidou ele.
-      if (!(await isBoardMember(boardId, user.id))) {
+      if (!(await isBoardMember(boardId, currentUser.id))) {
         return;
       }
       socket.join(boardId);
       if (!presence.has(boardId)) {
         presence.set(boardId, new Map());
       }
-      presence.get(boardId)!.set(socket.id, user);
+      presence.get(boardId)!.set(socket.id, currentUser);
       broadcastPresence(io, boardId);
     });
 
     socket.on("board:leave", (boardId: string) => {
       socket.leave(boardId);
       removeFromRoom(io, boardId, socket.id);
+    });
+
+    // Disparado pelo frontend depois de PATCH /me ter sucesso (ver
+    // lib/socket.ts, notifyProfileUpdated). Sem isso, a presença ao vivo
+    // guardava o nome só do momento em que o socket conectou — trocar o
+    // nome no perfil não refletia em nenhum board já aberto até reconectar
+    // (F5/logout). Atualiza o cache local e reemite a presença em toda
+    // room que esse socket estiver, com dados de verdade.
+    socket.on("profile:updated", async () => {
+      const fresh = await prisma.user.findUnique({
+        where: { id: currentUser.id },
+        select: { id: true, name: true },
+      });
+      if (!fresh) return;
+      currentUser = fresh;
+
+      for (const boardId of socket.rooms) {
+        const room = presence.get(boardId);
+        if (room?.has(socket.id)) {
+          room.set(socket.id, fresh);
+          broadcastPresence(io, boardId);
+        }
+      }
     });
 
     // Todos os eventos de mutação ("list:created", "list:updated",

@@ -6,6 +6,7 @@ import { authRouter } from "./routes/auth.routes";
 import { boardRouter } from "./routes/board.routes";
 import { cardRouter } from "./routes/card.routes";
 import { listRouter } from "./routes/list.routes";
+import { meRouter } from "./routes/me.routes";
 import { registerBoardSocket } from "./sockets/boardSocket";
 
 /**
@@ -25,6 +26,7 @@ export function createApp(frontendUrl: string) {
 
   app.get("/health", (_req, res) => res.json({ ok: true }));
   app.use("/auth", authRouter);
+  app.use("/me", meRouter);
   app.use("/boards", boardRouter);
   app.use("/lists", listRouter);
   app.use("/cards", cardRouter);

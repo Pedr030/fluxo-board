@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ApiError, hasToken, login, register, saveToken } from "@/lib/api";
+import { EyeIcon, EyeOffIcon } from "@/components/icons";
 import { Logo } from "@/components/Logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -96,15 +97,9 @@ export default function HomePage() {
               className="absolute right-2 top-1/2 -translate-y-1/2 text-ink-soft hover:text-brand-500"
             >
               {showPassword ? (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M17.94 17.94A10.94 10.94 0 0112 20c-6 0-10-6-10-8a17.6 17.6 0 014.22-4.94M9.9 4.24A9.12 9.12 0 0112 4c6 0 10 6 10 8a17.5 17.5 0 01-2.16 3.19M14.12 14.12a3 3 0 11-4.24-4.24" />
-                  <path d="M1 1l22 22" />
-                </svg>
+                <EyeOffIcon className="h-4 w-4" />
               ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
+                <EyeIcon className="h-4 w-4" />
               )}
             </button>
           </div>
