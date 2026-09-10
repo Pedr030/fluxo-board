@@ -116,6 +116,48 @@ describe("Socket.io: sincronização em tempo real", () => {
     expect(payload.card.title).toBe("Card ao vivo");
   });
 
+  it("list:moved chega em tempo real quando uma lista é reordenada", async () => {
+    const tokenA = await registerAndGetToken("a@teste.com");
+    const boardRes = await request(app)
+      .post("/boards")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ title: "Board" });
+    const boardId = boardRes.body.board.id;
+
+    const listAId = (
+      await request(app)
+        .post(`/boards/${boardId}/lists`)
+        .set("Authorization", `Bearer ${tokenA}`)
+        .send({ title: "A" })
+    ).body.list.id;
+    await request(app)
+      .post(`/boards/${boardId}/lists`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ title: "B" });
+
+    const tokenB = await registerAndGetToken("b@teste.com");
+    await request(app)
+      .post(`/boards/${boardId}/invite`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ email: "b@teste.com" });
+
+    const clientA = await connectClient(tokenA);
+    const clientB = await connectClient(tokenB);
+    clientA.emit("board:join", boardId);
+    clientB.emit("board:join", boardId);
+    await new Promise((r) => setTimeout(r, 150));
+
+    const eventPromise = waitForEvent<{ orderedListIds: string[] }>(clientB, "list:moved");
+
+    await request(app)
+      .patch(`/lists/${listAId}`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ position: 1 });
+
+    const payload = await eventPromise;
+    expect(payload.orderedListIds[1]).toBe(listAId);
+  });
+
   it("quem não é membro do board não entra na room (não recebe os eventos)", async () => {
     const tokenOwner = await registerAndGetToken("dona@teste.com");
     const tokenOutsider = await registerAndGetToken("de-fora@teste.com");

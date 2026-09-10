@@ -88,7 +88,7 @@ Todas as rotas abaixo (exceto `/auth/*`) exigem header
 | GET | `/boards/:id` | detalhe do board com lists+cards |
 | POST | `/boards/:id/invite` | adiciona membro `{ email }` |
 | POST | `/boards/:id/lists` | cria lista `{ title }` *(a implementar)* |
-| PATCH | `/lists/:id` | renomeia/reordena lista *(a implementar)* |
+| PATCH | `/lists/:id` | renomeia (`{ title }`) ou reordena (`{ position }`) lista |
 | POST | `/lists/:id/cards` | cria card `{ title }` *(a implementar)* |
 | PATCH | `/cards/:id` | edita/move card `{ title?, description?, listId?, position? }` *(a implementar)* |
 | DELETE | `/cards/:id` | remove card *(a implementar)* |
@@ -106,7 +106,8 @@ com `board:leave` ao desmontar a página.
 | Evento (servidor → clientes na room) | Payload | Disparado por |
 |---|---|---|
 | `list:created` | `{ list }` | `POST /boards/:id/lists` |
-| `list:updated` | `{ list }` | `PATCH /lists/:id` |
+| `list:updated` | `{ list }` | `PATCH /lists/:id` (título) |
+| `list:moved` | `{ orderedListIds }` | `PATCH /lists/:id` (position) |
 | `card:created` | `{ card }` | `POST /lists/:id/cards` |
 | `card:moved` | `{ card, fromListId, toListId }` | `PATCH /cards/:id` (quando `listId`/`position` muda) |
 | `card:updated` | `{ card }` | `PATCH /cards/:id` (título/descrição) |

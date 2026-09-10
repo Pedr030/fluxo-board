@@ -59,6 +59,45 @@ describe("Lists: criação e posição", () => {
   });
 });
 
+describe("Lists: mover (PATCH /lists/:id com position)", () => {
+  it("reordena as listas do board, reindexando 0..n-1 sem buracos", async () => {
+    const token = await registerUser("dona@teste.com");
+    const boardId = await createBoard(token);
+
+    const idA = await createList(token, boardId, "A Fazer");
+    await createList(token, boardId, "Em Progresso");
+    const idC = await createList(token, boardId, "Feito");
+
+    // Move "A Fazer" (posição 0) pro final (posição 2)
+    const res = await request(app)
+      .patch(`/lists/${idA}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ position: 2 });
+    expect(res.status).toBe(204);
+
+    const board = await getBoard(token, boardId);
+    expect(board.lists.map((l) => l.title)).toEqual(["Em Progresso", "Feito", "A Fazer"]);
+    expect(board.lists.map((l) => l.position)).toEqual([0, 1, 2]);
+    expect(board.lists.map((l) => l.id)).toEqual([
+      board.lists.find((l) => l.title === "Em Progresso")!.id,
+      idC,
+      idA,
+    ]);
+  });
+
+  it("400 se não mandar nem title nem position", async () => {
+    const token = await registerUser("dona@teste.com");
+    const boardId = await createBoard(token);
+    const listId = await createList(token, boardId, "A Fazer");
+
+    const res = await request(app)
+      .patch(`/lists/${listId}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({});
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("Cards: mover (PATCH /cards/:id)", () => {
   it("reordena dentro da mesma lista", async () => {
     const token = await registerUser("dona@teste.com");

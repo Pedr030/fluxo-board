@@ -132,6 +132,7 @@ export function AccountDeletionSection({ userId }: { userId: string }) {
             <div key={board.id} className="rounded-card border border-surface-border bg-surface p-3">
               <p className="mb-2 text-sm font-medium text-ink">{board.title}</p>
               <select
+                aria-label={`O que fazer com o board ${board.title}`}
                 className="w-full rounded-card border border-surface-border bg-surface p-2 text-sm text-ink outline-none focus:border-brand-500"
                 value={choices[board.id] ?? ""}
                 onChange={(e) => setChoices((prev) => ({ ...prev, [board.id]: e.target.value }))}

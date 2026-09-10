@@ -46,6 +46,7 @@ export function CardView({ card }: { card: CardData }) {
 export function Card({ card }: { card: CardData }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
+    data: { type: "card" },
   });
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(card.title);
@@ -90,7 +91,12 @@ export function Card({ card }: { card: CardData }) {
 
   return (
     <div ref={setNodeRef} style={style} className="group relative">
-      <div {...attributes} {...listeners} className="cursor-grab touch-none active:cursor-grabbing">
+      <div
+        {...attributes}
+        {...listeners}
+        aria-label={`Card "${card.title}" — arraste ou use as setas do teclado para mover`}
+        className="cursor-grab touch-none active:cursor-grabbing"
+      >
         <div className="rounded-card border border-surface-border bg-surface p-4 pr-8 text-base font-medium text-ink shadow-card transition-shadow hover:shadow-none">
           {editing ? (
             <input

@@ -196,6 +196,12 @@ export const createList = (boardId: string, title: string) =>
     body: JSON.stringify({ title }),
   });
 
+export const moveList = (listId: string, position: number) =>
+  apiFetch<void>(`/lists/${listId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ position }),
+  });
+
 export const updateList = (listId: string, title: string) =>
   apiFetch<{ list: ListItem }>(`/lists/${listId}`, {
     method: "PATCH",

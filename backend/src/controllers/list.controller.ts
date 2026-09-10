@@ -41,19 +41,24 @@ export async function createList(req: AuthRequest, res: Response) {
 }
 
 const updateListSchema = z.object({
-  title: z.string().min(1),
+  title: z.string().min(1).optional(),
+  position: z.number().int().min(0).optional(),
 });
 
 /**
- * PATCH /lists/:id  { title: string }
- * Renomeia a lista. Reordenar lista entre boards não existe nesse projeto
- * (só cards se movem entre listas — ver etapa de drag-and-drop).
+ * PATCH /lists/:id  { title? } ou { position? }
+ * Dois modos mutuamente exclusivos, mesma ideia do updateCard:
+ *  - title: renomeia.
+ *  - position: reordena a lista dentro do próprio board (lista não muda
+ *    de board, diferente de card que muda de lista — não precisa de
+ *    "board de destino").
  */
 export async function updateList(req: AuthRequest, res: Response) {
   const parsed = updateListSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
+  const { title, position: toPosition } = parsed.data;
   const listId = req.params.id;
 
   const list = await prisma.list.findUnique({ where: { id: listId } });
@@ -64,12 +69,36 @@ export async function updateList(req: AuthRequest, res: Response) {
     return res.status(403).json({ error: "Você não é membro deste board" });
   }
 
+  const io = req.app.get("io") as Server;
+
+  if (toPosition !== undefined) {
+    const orderedListIds = await prisma.$transaction(async (tx) => {
+      const siblings = await tx.list.findMany({
+        where: { boardId: list.boardId },
+        orderBy: { position: "asc" },
+      });
+      const reordered = siblings.filter((l) => l.id !== listId);
+      reordered.splice(Math.min(toPosition, reordered.length), 0, list);
+
+      await Promise.all(
+        reordered.map((l, index) => tx.list.update({ where: { id: l.id }, data: { position: index } }))
+      );
+      return reordered.map((l) => l.id);
+    });
+
+    io.to(list.boardId).emit("list:moved", { orderedListIds });
+    return res.status(204).send();
+  }
+
+  if (title === undefined) {
+    return res.status(400).json({ error: "Nada para atualizar" });
+  }
+
   const updated = await prisma.list.update({
     where: { id: listId },
-    data: { title: parsed.data.title },
+    data: { title },
   });
 
-  const io = req.app.get("io") as Server;
   io.to(list.boardId).emit("list:updated", { list: updated });
 
   return res.json({ list: updated });

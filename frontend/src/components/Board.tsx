@@ -7,11 +7,18 @@ import {
   DragEndEvent,
   DragOverlay,
   DragStartEvent,
+  KeyboardSensor,
   PointerSensor,
   closestCorners,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  sortableKeyboardCoordinates,
+} from "@dnd-kit/sortable";
 import { getSocket } from "@/lib/socket";
 import {
   ApiError,
@@ -21,6 +28,7 @@ import {
   inviteMember as apiInviteMember,
   listMembers,
   moveCard as apiMoveCard,
+  moveList as apiMoveList,
 } from "@/lib/api";
 import { Avatar } from "./Avatar";
 import { CardData, CardView } from "./Card";
@@ -101,7 +109,8 @@ export function Board({ boardId }: { boardId: string }) {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   // Mensagem passageira (ex: drag-and-drop que falhou e já foi ressincronizado
@@ -190,6 +199,16 @@ export function Board({ boardId }: { boardId: string }) {
       setLists((prev) => prev.filter((l) => l.id !== listId));
     }
 
+    function handleListMoved({ orderedListIds }: { orderedListIds: string[] }) {
+      setLists((prev) => {
+        const byId = new Map(prev.map((l) => [l.id, l]));
+        const reordered = orderedListIds.map((id) => byId.get(id)).filter((l): l is ListData => !!l);
+        // Se por algum motivo faltar alguma lista no payload (não deveria
+        // acontecer), não descarta ela — só evita perder dado silenciosamente.
+        return reordered.length === prev.length ? reordered : prev;
+      });
+    }
+
     function handlePresenceUpdate({ users }: { users: PresenceUser[] }) {
       setOnlineUsers(users);
     }
@@ -201,6 +220,7 @@ export function Board({ boardId }: { boardId: string }) {
     socket.on("list:created", handleListCreated);
     socket.on("list:updated", handleListUpdated);
     socket.on("list:deleted", handleListDeleted);
+    socket.on("list:moved", handleListMoved);
     socket.on("card:created", handleCardCreated);
     socket.on("card:moved", handleCardMoved);
     socket.on("card:updated", handleCardUpdated);
@@ -213,6 +233,7 @@ export function Board({ boardId }: { boardId: string }) {
       socket.off("list:created", handleListCreated);
       socket.off("list:updated", handleListUpdated);
       socket.off("list:deleted", handleListDeleted);
+      socket.off("list:moved", handleListMoved);
       socket.off("card:created", handleCardCreated);
       socket.off("card:moved", handleCardMoved);
       socket.off("card:updated", handleCardUpdated);
@@ -264,11 +285,50 @@ export function Board({ boardId }: { boardId: string }) {
   }
 
   function handleDragStart(event: DragStartEvent) {
+    if (event.active.data.current?.type === "list") {
+      setActiveCard(null);
+      return;
+    }
     const card = lists.flatMap((l) => l.cards).find((c) => c.id === event.active.id);
     setActiveCard(card ?? null);
   }
 
+  // Acha em qual lista um id de "over" cai — o id pode ser a própria lista
+  // (arrastando uma lista por cima de outra), um card dentro dela (mais
+  // comum, o cursor quase sempre está sobre algum card), ou o prefixo
+  // "list-*" de outra lista sendo arrastada.
+  function resolveOverListId(overId: string): string | undefined {
+    if (overId.startsWith("list-")) return overId.slice("list-".length);
+    if (lists.some((l) => l.id === overId)) return overId;
+    return lists.find((l) => l.cards.some((c) => c.id === overId))?.id;
+  }
+
+  function handleListDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over) return;
+
+    const draggedListId = active.data.current?.listId as string;
+    const overListId = resolveOverListId(over.id as string);
+    if (!overListId || draggedListId === overListId) return;
+
+    const fromIndex = lists.findIndex((l) => l.id === draggedListId);
+    const toIndex = lists.findIndex((l) => l.id === overListId);
+    if (fromIndex === -1 || toIndex === -1) return;
+
+    setLists((prev) => arrayMove(prev, fromIndex, toIndex));
+
+    apiMoveList(draggedListId, toIndex).catch(() => {
+      flashError("Não foi possível mover a lista — desfazendo.");
+      getBoard(boardId).then(({ board }) => setLists(board.lists));
+    });
+  }
+
   function handleDragEnd(event: DragEndEvent) {
+    if (event.active.data.current?.type === "list") {
+      handleListDragEnd(event);
+      return;
+    }
+
     setActiveCard(null);
     const { active, over } = event;
     if (!over) return;
@@ -455,9 +515,14 @@ export function Board({ boardId }: { boardId: string }) {
           onDragEnd={handleDragEnd}
         >
           <main className="flex flex-1 gap-5 overflow-x-auto p-6">
-            {lists.map((list) => (
-              <List key={list.id} list={list} />
-            ))}
+            <SortableContext
+              items={lists.map((l) => `list-${l.id}`)}
+              strategy={horizontalListSortingStrategy}
+            >
+              {lists.map((list) => (
+                <List key={list.id} list={list} />
+              ))}
+            </SortableContext>
 
             <form onSubmit={handleCreateList} className="flex w-80 shrink-0 flex-col gap-2">
               <input

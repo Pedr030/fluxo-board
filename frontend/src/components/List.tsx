@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   createCard as apiCreateCard,
   deleteList as apiDeleteList,
@@ -19,15 +20,34 @@ export interface ListData {
 }
 
 /**
- * Uma coluna do board (ex: "A fazer", "Em progresso", "Feito"). A própria
- * lista é uma área "droppable" (pra dar pra soltar um card numa lista vazia
- * ou depois do último card) e os cards ficam num SortableContext, que é
- * quem cuida da reordenação visual enquanto arrasta.
- * Igual ao Card: editar título ou excluir só chama a API — quem atualiza a
- * tela é o listener de socket no Board ("list:updated"/"list:deleted").
+ * Uma coluna do board (ex: "A fazer", "Em progresso", "Feito"). Dois
+ * mecanismos de drag-and-drop diferentes no mesmo componente, com ids
+ * separados de propósito (`list-${list.id}` vs `list.id` puro) — senão o
+ * dnd-kit registraria dois nós pro mesmo id e um atrapalharia o outro:
+ *  - a lista inteira é arrastável (useSortable, id `list-${list.id}`,
+ *    handle = cabeçalho) pra reordenar as colunas do board.
+ *  - dentro dela, a área dos cards é "droppable" (useDroppable, id
+ *    `list.id` puro — sem o prefixo) pra dar pra soltar um card numa lista
+ *    vazia ou depois do último, e os cards ficam num SortableContext.
+ * Igual ao Card: editar título/excluir/mover só chama a API — quem atualiza
+ * a tela é o listener de socket no Board ("list:updated"/"list:deleted"/
+ * "list:moved").
  */
 export function List({ list }: { list: ListData }) {
-  const { setNodeRef } = useDroppable({ id: list.id });
+  const {
+    attributes,
+    listeners,
+    setNodeRef: setSortableRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: `list-${list.id}`, data: { type: "list", listId: list.id } });
+  const { setNodeRef: setDroppableRef } = useDroppable({ id: list.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
   const [title, setTitle] = useState("");
   const [creating, setCreating] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -82,8 +102,17 @@ export function List({ list }: { list: ListData }) {
   }
 
   return (
-    <div className="flex w-80 shrink-0 flex-col gap-3 rounded-list border border-surface-border bg-surface/70 p-4">
-      <div className="group flex items-center justify-between gap-2">
+    <div
+      ref={setSortableRef}
+      style={style}
+      className="flex w-80 shrink-0 flex-col gap-3 rounded-list border border-surface-border bg-surface/70 p-4"
+    >
+      <div
+        {...attributes}
+        {...listeners}
+        aria-label={`Lista "${list.title}" — arraste ou use as setas do teclado para reordenar`}
+        className="group flex cursor-grab items-center justify-between gap-2 touch-none active:cursor-grabbing"
+      >
         {editingTitle ? (
           <input
             autoFocus
@@ -92,6 +121,7 @@ export function List({ list }: { list: ListData }) {
             onChange={(e) => setTitleDraft(e.target.value)}
             onBlur={handleSaveTitle}
             onKeyDown={(e) => e.key === "Enter" && handleSaveTitle()}
+            onPointerDown={(e) => e.stopPropagation()}
           />
         ) : (
           <h3
@@ -103,6 +133,7 @@ export function List({ list }: { list: ListData }) {
         )}
         <button
           onClick={() => setConfirmOpen(true)}
+          onPointerDown={(e) => e.stopPropagation()}
           className="hidden shrink-0 rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover:block"
           aria-label="Excluir lista"
         >
@@ -119,7 +150,7 @@ export function List({ list }: { list: ListData }) {
         onConfirm={handleDeleteList}
         onCancel={() => setConfirmOpen(false)}
       />
-      <div ref={setNodeRef} className="flex min-h-[40px] flex-col gap-3">
+      <div ref={setDroppableRef} className="flex min-h-[40px] flex-col gap-3">
         <SortableContext items={list.cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
           {list.cards.map((card) => (
             <Card key={card.id} card={card} />
