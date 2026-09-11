@@ -40,7 +40,18 @@ async function createCard(token: string, listId: string, title: string) {
 async function getBoard(token: string, boardId: string) {
   const res = await request(app).get(`/boards/${boardId}`).set("Authorization", `Bearer ${token}`);
   return res.body.board as {
-    lists: { id: string; title: string; position: number; cards: { id: string; title: string; position: number }[] }[];
+    lists: {
+      id: string;
+      title: string;
+      position: number;
+      cards: {
+        id: string;
+        title: string;
+        position: number;
+        dueDate: string | null;
+        completed: boolean;
+      }[];
+    }[];
   };
 }
 
@@ -180,6 +191,49 @@ describe("Cards: editar e excluir", () => {
     expect(res.status).toBe(200);
     expect(res.body.card.title).toBe("Editado");
     expect(res.body.card.position).toBe(0);
+  });
+
+  it("PATCH com dueDate e completed edita o prazo do card", async () => {
+    const token = await registerUser("dona@teste.com");
+    const boardId = await createBoard(token);
+    const listId = await createList(token, boardId, "Lista");
+    const cardId = await createCard(token, listId, "Card com prazo");
+
+    const created = await getBoard(token, boardId);
+    expect(created.lists[0].cards[0].dueDate).toBeNull();
+    expect(created.lists[0].cards[0].completed).toBe(false);
+
+    const res = await request(app)
+      .patch(`/cards/${cardId}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ dueDate: "2026-12-01", completed: true });
+
+    expect(res.status).toBe(200);
+    expect(new Date(res.body.card.dueDate).toISOString().slice(0, 10)).toBe("2026-12-01");
+    expect(res.body.card.completed).toBe(true);
+
+    const clear = await request(app)
+      .patch(`/cards/${cardId}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ dueDate: null });
+
+    expect(clear.status).toBe(200);
+    expect(clear.body.card.dueDate).toBeNull();
+    expect(clear.body.card.completed).toBe(true); // não mexe em completed se não mandar
+  });
+
+  it("400 se dueDate for uma string inválida", async () => {
+    const token = await registerUser("dona@teste.com");
+    const boardId = await createBoard(token);
+    const listId = await createList(token, boardId, "Lista");
+    const cardId = await createCard(token, listId, "Card");
+
+    const res = await request(app)
+      .patch(`/cards/${cardId}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ dueDate: "não é uma data" });
+
+    expect(res.status).toBe(400);
   });
 
   it("excluir reindexa a lista — sem buraco, sem position duplicada na próxima criação", async () => {

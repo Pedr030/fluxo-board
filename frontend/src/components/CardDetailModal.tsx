@@ -23,9 +23,9 @@ import {
 } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 import { Avatar } from "./Avatar";
-import { CardData } from "./Card";
+import { CardData, isCardOverdue } from "./Card";
 import { CreateLabelForm } from "./CreateLabelForm";
-import { CameraIcon, CheckIcon, PlusIcon, TrashIcon, XIcon } from "./icons";
+import { CalendarIcon, CameraIcon, CheckIcon, PlusIcon, TrashIcon, XIcon } from "./icons";
 
 /**
  * Painel de detalhes do card (estilo Trello: clicar no card abre isso em
@@ -86,6 +86,7 @@ export function CardDetailModal({
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingItemText, setEditingItemText] = useState("");
   const [checklistError, setChecklistError] = useState<string | null>(null);
+  const [dueDateError, setDueDateError] = useState<string | null>(null);
   const newItemInputRef = useRef<HTMLInputElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -267,6 +268,24 @@ export function CardDetailModal({
       }
     } catch {
       setLabelActionError("Não foi possível atualizar a etiqueta.");
+    }
+  }
+
+  async function handleChangeDueDate(value: string) {
+    setDueDateError(null);
+    try {
+      await apiUpdateCard(card.id, { dueDate: value || null });
+    } catch {
+      setDueDateError("Não foi possível salvar o prazo.");
+    }
+  }
+
+  async function handleToggleCompleted() {
+    setDueDateError(null);
+    try {
+      await apiUpdateCard(card.id, { completed: !card.completed });
+    } catch {
+      setDueDateError("Não foi possível atualizar o status.");
     }
   }
 
@@ -468,6 +487,52 @@ export function CardDetailModal({
                 </div>
               </>
             )}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <h3 className="text-sm font-medium text-ink-soft">Prazo</h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={handleToggleCompleted}
+                aria-label={card.completed ? "Desmarcar como concluído" : "Marcar como concluído"}
+                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-card border transition-colors ${
+                  card.completed
+                    ? "border-flow-500 bg-flow-500 text-white"
+                    : "border-surface-border text-transparent hover:border-brand-400"
+                }`}
+              >
+                <CheckIcon className="h-3.5 w-3.5" />
+              </button>
+              <div className="flex items-center gap-1 rounded-card border border-surface-border bg-surface px-2 py-1 text-sm text-ink transition-colors focus-within:border-brand-500">
+                <CalendarIcon className="h-4 w-4 shrink-0 text-ink-soft" />
+                <input
+                  type="date"
+                  aria-label="Data de vencimento"
+                  value={card.dueDate ? card.dueDate.slice(0, 10) : ""}
+                  onChange={(e) => handleChangeDueDate(e.target.value)}
+                  className="bg-transparent outline-none [color-scheme:light] dark:[color-scheme:dark]"
+                />
+              </div>
+              {card.dueDate && (
+                <button
+                  type="button"
+                  onClick={() => handleChangeDueDate("")}
+                  aria-label="Remover prazo"
+                  className="rounded-full p-1 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600"
+                >
+                  <XIcon className="h-3.5 w-3.5" />
+                </button>
+              )}
+              {card.completed ? (
+                <span className="text-xs font-medium text-flow-600 dark:text-flow-400">Concluído</span>
+              ) : (
+                isCardOverdue(card) && (
+                  <span className="text-xs font-medium text-red-600 dark:text-red-400">Vencido</span>
+                )
+              )}
+            </div>
+            {dueDateError && <p className="text-sm text-red-600 dark:text-red-400">{dueDateError}</p>}
           </div>
 
           <div className="flex flex-col gap-1.5">

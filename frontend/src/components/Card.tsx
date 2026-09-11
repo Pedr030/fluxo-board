@@ -6,15 +6,50 @@ import { CSS } from "@dnd-kit/utilities";
 import { ChecklistItem, Label, deleteCard as apiDeleteCard } from "@/lib/api";
 import { CardDetailModal } from "./CardDetailModal";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { CheckIcon, TrashIcon } from "./icons";
+import { CalendarIcon, CheckIcon, TrashIcon } from "./icons";
 
 export interface CardData {
   id: string;
   title: string;
   description?: string | null;
   createdAt?: string;
+  dueDate: string | null;
+  completed: boolean;
   labelIds: string[];
   checklistItems: ChecklistItem[];
+}
+
+/**
+ * "Vencido" = prazo já passou e o card não foi marcado como concluído.
+ * Compara strings "YYYY-MM-DD" em vez de instantes (Date): o prazo é
+ * salvo como meia-noite UTC do dia escolhido, e comparar Date objects
+ * diretamente reinterpreta esse instante no fuso local — em fusos atrás
+ * de UTC (ex: Brasil, UTC-3) isso faria um card vencendo "hoje" já
+ * aparecer vencido horas antes da meia-noite local. Comparando só a
+ * data (string) o resultado não depende do fuso de quem está vendo.
+ */
+export function isCardOverdue(card: Pick<CardData, "dueDate" | "completed">): boolean {
+  if (!card.dueDate || card.completed) return false;
+  return card.dueDate.slice(0, 10) < todayDateString();
+}
+
+function todayDateString(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+// timeZone: "UTC" pelo mesmo motivo do comentário acima — sem isso,
+// toLocaleDateString reinterpreta a meia-noite UTC salva no fuso local
+// e pode exibir o dia anterior.
+export function formatDueDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    timeZone: "UTC",
+  });
 }
 
 /**
@@ -63,16 +98,34 @@ export function CardBody({ card, labels }: { card: CardData; labels: Label[] }) 
           {card.description}
         </p>
       )}
-      {card.checklistItems.length > 0 && (
-        <div
-          className={`mt-2 flex w-fit items-center gap-1 rounded-card px-1.5 py-0.5 text-xs font-medium ${
-            card.checklistItems.every((i) => i.done)
-              ? "bg-flow-100 text-flow-700 dark:bg-flow-500/20 dark:text-flow-400"
-              : "bg-surface-border/50 text-ink-soft"
-          }`}
-        >
-          <CheckIcon className="h-3 w-3" />
-          {card.checklistItems.filter((i) => i.done).length}/{card.checklistItems.length}
+      {(card.checklistItems.length > 0 || card.dueDate) && (
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {card.checklistItems.length > 0 && (
+            <div
+              className={`flex w-fit items-center gap-1 rounded-card px-1.5 py-0.5 text-xs font-medium ${
+                card.checklistItems.every((i) => i.done)
+                  ? "bg-flow-100 text-flow-700 dark:bg-flow-500/20 dark:text-flow-400"
+                  : "bg-surface-border/50 text-ink-soft"
+              }`}
+            >
+              <CheckIcon className="h-3 w-3" />
+              {card.checklistItems.filter((i) => i.done).length}/{card.checklistItems.length}
+            </div>
+          )}
+          {card.dueDate && (
+            <div
+              className={`flex w-fit items-center gap-1 rounded-card px-1.5 py-0.5 text-xs font-medium ${
+                card.completed
+                  ? "bg-flow-100 text-flow-700 dark:bg-flow-500/20 dark:text-flow-400"
+                  : isCardOverdue(card)
+                  ? "bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400"
+                  : "bg-surface-border/50 text-ink-soft"
+              }`}
+            >
+              <CalendarIcon className="h-3 w-3" />
+              {formatDueDate(card.dueDate)}
+            </div>
+          )}
         </div>
       )}
     </>

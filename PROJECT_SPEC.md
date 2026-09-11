@@ -66,7 +66,7 @@ Já implementado em `backend/prisma/schema.prisma`. Resumo:
 | `Board` | title, ownerId | tem várias `List` |
 | `BoardMember` | boardId, userId, role (OWNER/MEMBER) | liga User↔Board (N:N com atributo) |
 | `List` | title, position, boardId | tem vários `Card` |
-| `Card` | title, description, position, listId, creatorId | pertence a uma `List` |
+| `Card` | title, description, position, listId, creatorId, dueDate, completed | pertence a uma `List` |
 | `Comment` | text, cardId, authorId, createdAt | pertence a um `Card` |
 | `Attachment` | cardId, uploaderId, filename, mimeType, size, url, createdAt | pertence a um `Card` |
 | `Label` | boardId, name, color | pertence a um `Board`, paleta compartilhada |
@@ -95,7 +95,7 @@ Todas as rotas abaixo (exceto `/auth/*`) exigem header
 | POST | `/boards/:id/lists` | cria lista `{ title }` |
 | PATCH | `/lists/:id` | renomeia (`{ title }`) ou reordena (`{ position }`) lista |
 | POST | `/lists/:id/cards` | cria card `{ title }` |
-| PATCH | `/cards/:id` | edita/move card `{ title?, description?, listId?, position? }` |
+| PATCH | `/cards/:id` | edita/move card `{ title?, description?, listId?, position?, dueDate?, completed? }` |
 | DELETE | `/cards/:id` | remove card |
 | DELETE | `/boards/:id` | remove board (só o dono) |
 | GET | `/cards/:id/comments` | lista comentários do card, em ordem cronológica |
@@ -129,7 +129,7 @@ com `board:leave` ao desmontar a página.
 | `list:moved` | `{ orderedListIds }` | `PATCH /lists/:id` (position) |
 | `card:created` | `{ card }` | `POST /lists/:id/cards` |
 | `card:moved` | `{ card, fromListId, toListId }` | `PATCH /cards/:id` (quando `listId`/`position` muda) |
-| `card:updated` | `{ card }` | `PATCH /cards/:id` (título/descrição) |
+| `card:updated` | `{ card }` | `PATCH /cards/:id` (título/descrição/prazo/conclusão) |
 | `card:deleted` | `{ cardId, listId }` | `DELETE /cards/:id` |
 | `board:deleted` | `{ boardId }` | `DELETE /boards/:id` |
 | `comment:created` | `{ comment, cardId }` | `POST /cards/:id/comments` |
@@ -187,7 +187,7 @@ pra próxima, o que ajuda demais quando você tá pareando com o Claude Code
 - ~~CI (GitHub Actions rodando lint + testes a cada push)~~ — feito
 - Histórico de atividade do board (quem fez o quê e quando)
 - ~~Checklist dentro do card~~ — feito
-- Data de vencimento (due date) no card
+- ~~Data de vencimento (due date) no card~~ — feito
 
 ## 7. Autenticação — detalhes
 
