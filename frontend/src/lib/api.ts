@@ -147,6 +147,7 @@ export interface CardItem {
   description: string | null;
   position: number;
   listId: string;
+  createdAt: string;
 }
 
 export interface ListItem {
@@ -288,3 +289,23 @@ export const deleteAccount = (resolutions: AccountDeletionResolution[]) =>
     method: "DELETE",
     body: JSON.stringify({ resolutions }),
   });
+
+export interface Comment {
+  id: string;
+  text: string;
+  cardId: string;
+  createdAt: string;
+  author: { id: string; name: string; avatarUrl: string | null } | null;
+}
+
+export const listComments = (cardId: string) =>
+  apiFetch<{ comments: Comment[] }>(`/cards/${cardId}/comments`);
+
+export const createComment = (cardId: string, text: string) =>
+  apiFetch<{ comment: Comment }>(`/cards/${cardId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+
+export const deleteComment = (commentId: string) =>
+  apiFetch<void>(`/comments/${commentId}`, { method: "DELETE" });

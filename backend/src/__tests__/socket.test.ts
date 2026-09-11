@@ -116,6 +116,49 @@ describe("Socket.io: sincronização em tempo real", () => {
     expect(payload.card.title).toBe("Card ao vivo");
   });
 
+  it("comment:created chega em tempo real pra quem está na room do board", async () => {
+    const tokenA = await registerAndGetToken("a@teste.com");
+    const boardRes = await request(app)
+      .post("/boards")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ title: "Board" });
+    const boardId = boardRes.body.board.id;
+
+    const listRes = await request(app)
+      .post(`/boards/${boardId}/lists`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ title: "Lista" });
+    const cardRes = await request(app)
+      .post(`/lists/${listRes.body.list.id}/cards`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ title: "Card" });
+    const cardId = cardRes.body.card.id;
+
+    const tokenB = await registerAndGetToken("b@teste.com");
+    await request(app)
+      .post(`/boards/${boardId}/invite`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ email: "b@teste.com" });
+
+    const clientA = await connectClient(tokenA);
+    const clientB = await connectClient(tokenB);
+
+    clientA.emit("board:join", boardId);
+    clientB.emit("board:join", boardId);
+    await new Promise((r) => setTimeout(r, 150));
+
+    const eventPromise = waitForEvent(clientB, "comment:created");
+
+    await request(app)
+      .post(`/cards/${cardId}/comments`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ text: "Comentário ao vivo" });
+
+    const payload = await eventPromise;
+    expect(payload.comment.text).toBe("Comentário ao vivo");
+    expect(payload.cardId).toBe(cardId);
+  });
+
   it("list:moved chega em tempo real quando uma lista é reordenada", async () => {
     const tokenA = await registerAndGetToken("a@teste.com");
     const boardRes = await request(app)

@@ -67,6 +67,7 @@ Já implementado em `backend/prisma/schema.prisma`. Resumo:
 | `BoardMember` | boardId, userId, role (OWNER/MEMBER) | liga User↔Board (N:N com atributo) |
 | `List` | title, position, boardId | tem vários `Card` |
 | `Card` | title, description, position, listId, creatorId | pertence a uma `List` |
+| `Comment` | text, cardId, authorId, createdAt | pertence a um `Card` |
 
 **Sobre `position` (ordenação de listas e cards):** a forma mais simples é
 usar inteiros e reindexar (0, 1, 2, ...) sempre que a ordem mudar dentro de
@@ -87,16 +88,15 @@ Todas as rotas abaixo (exceto `/auth/*`) exigem header
 | POST | `/boards` | cria board `{ title }` |
 | GET | `/boards/:id` | detalhe do board com lists+cards |
 | POST | `/boards/:id/invite` | adiciona membro `{ email }` |
-| POST | `/boards/:id/lists` | cria lista `{ title }` *(a implementar)* |
+| POST | `/boards/:id/lists` | cria lista `{ title }` |
 | PATCH | `/lists/:id` | renomeia (`{ title }`) ou reordena (`{ position }`) lista |
-| POST | `/lists/:id/cards` | cria card `{ title }` *(a implementar)* |
-| PATCH | `/cards/:id` | edita/move card `{ title?, description?, listId?, position? }` *(a implementar)* |
-| DELETE | `/cards/:id` | remove card *(a implementar)* |
+| POST | `/lists/:id/cards` | cria card `{ title }` |
+| PATCH | `/cards/:id` | edita/move card `{ title?, description?, listId?, position? }` |
+| DELETE | `/cards/:id` | remove card |
 | DELETE | `/boards/:id` | remove board (só o dono) |
-
-As rotas marcadas "a implementar" ainda não têm arquivo de rota — crie
-seguindo o padrão de `backend/src/routes/board.routes.ts` quando chegar
-nessa etapa do roadmap (seção 6).
+| GET | `/cards/:id/comments` | lista comentários do card, em ordem cronológica |
+| POST | `/cards/:id/comments` | cria comentário `{ text }` |
+| DELETE | `/comments/:id` | remove comentário (só quem escreveu) |
 
 ## 5. Eventos de socket
 
@@ -113,6 +113,8 @@ com `board:leave` ao desmontar a página.
 | `card:updated` | `{ card }` | `PATCH /cards/:id` (título/descrição) |
 | `card:deleted` | `{ cardId, listId }` | `DELETE /cards/:id` |
 | `board:deleted` | `{ boardId }` | `DELETE /boards/:id` |
+| `comment:created` | `{ comment, cardId }` | `POST /cards/:id/comments` |
+| `comment:deleted` | `{ commentId, cardId }` | `DELETE /comments/:id` |
 
 Stub em `backend/src/sockets/boardSocket.ts` — os handlers de `join`/`leave`
 já existem, os eventos de mutação você adiciona junto com cada rota REST

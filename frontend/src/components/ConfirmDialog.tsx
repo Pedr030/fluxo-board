@@ -8,6 +8,9 @@ import { useEffect, useRef } from "react";
  * botão de confirmar num estado de "Excluindo..." e mostram o erro dentro
  * do próprio modal, sem fechar sozinho — assim dá pra tentar de novo sem
  * reabrir a confirmação.
+ *
+ * z-[60], não z-50: precisa ficar por cima do CardDetailModal (z-50) quando
+ * a exclusão é disparada de dentro dele.
  */
 export function ConfirmDialog({
   open,
@@ -61,7 +64,7 @@ export function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4"
       onClick={onCancel}
     >
       <div

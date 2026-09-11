@@ -19,9 +19,10 @@ model User {
   avatarUrl String?
   createdAt DateTime @default(now())
 
-  memberships  BoardMember[]
-  ownedBoards  Board[]       @relation("BoardOwner")
-  cardsCreated Card[]        @relation("CardCreator")
+  memberships     BoardMember[]
+  ownedBoards     Board[]       @relation("BoardOwner")
+  cardsCreated    Card[]        @relation("CardCreator")
+  commentsWritten Comment[]     @relation("CommentAuthor")
 }
 
 model Board {
@@ -79,5 +80,20 @@ model Card {
   // SetNull, não Cascade: excluir a conta de quem criou um card não deveria
   // apagar o card em si (que pode estar num board de outra pessoa) — só
   // perde a atribuição de quem criou.
-  creator User? @relation("CardCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  creator  User?     @relation("CardCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  comments Comment[]
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  text      String
+  cardId    String
+  authorId  String?
+  createdAt DateTime @default(now())
+
+  // Cascade aqui (diferente do autor): excluir o card deveria levar os
+  // comentários junto, é conteúdo dele — diferente de excluir a CONTA de
+  // quem comentou, que só perde a atribuição (mesmo padrão do Card.creator).
+  card   Card  @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  author User? @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
 }
