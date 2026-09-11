@@ -35,6 +35,7 @@ model Board {
 
   members BoardMember[]
   lists   List[]
+  labels  Label[]
 }
 
 enum Role {
@@ -84,6 +85,7 @@ model Card {
   creator     User?        @relation("CardCreator", fields: [creatorId], references: [id], onDelete: SetNull)
   comments    Comment[]
   attachments Attachment[]
+  cardLabels  CardLabel[]
 }
 
 model Comment {
@@ -116,4 +118,32 @@ model Attachment {
   // controller antes de excluir a linha, não por trigger do banco.
   card     Card  @relation(fields: [cardId], references: [id], onDelete: Cascade)
   uploader User? @relation("AttachmentUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
+}
+
+// Etiquetas coloridas do board (a paleta é compartilhada por todos os
+// cards dele, igual Trello — criar/editar uma etiqueta muda a cor em
+// todo card que já usa ela). `name` é opcional: dá pra ter só uma cor,
+// sem texto, também igual Trello.
+model Label {
+  id      String  @id @default(cuid())
+  boardId String
+  name    String?
+  color   String
+
+  board Board       @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  cards CardLabel[]
+}
+
+// Tabela de junção Card↔Label (N:N). Sem onDelete: SetNull pra pensar
+// aqui — não tem "autor" nessa relação, só as duas pontas, e as duas
+// fazem sentido em Cascade: card ou label sumindo, a associação não tem
+// mais motivo pra existir.
+model CardLabel {
+  cardId  String
+  labelId String
+
+  card  Card  @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@id([cardId, labelId])
 }

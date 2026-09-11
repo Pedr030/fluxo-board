@@ -10,6 +10,16 @@ const createCardSchema = z.object({
   title: z.string().min(1),
 });
 
+// Card + cardLabels (join) -> card + labelIds (achatado). Usado sempre que
+// um endpoint devolve um card inteiro via socket — o evento substitui o
+// card por completo no estado do frontend (mesma regra de ouro do resto
+// do app), então esquecer de incluir labelIds aqui apagaria as etiquetas
+// da tela até o próximo reload, mesmo elas continuando no banco.
+function withLabelIds<T extends { cardLabels: { labelId: string }[] }>(card: T) {
+  const { cardLabels, ...rest } = card;
+  return { ...rest, labelIds: cardLabels.map((cl) => cl.labelId) };
+}
+
 /**
  * POST /lists/:id/cards  { title: string }
  * Cria um card no fim da lista — position = quantidade de cards
@@ -35,10 +45,12 @@ export async function createCard(req: AuthRequest, res: Response) {
     data: { title: parsed.data.title, listId, position, creatorId: req.userId },
   });
 
-  const io = req.app.get("io") as Server;
-  io.to(list.boardId).emit("card:created", { card });
+  const cardWithLabels = { ...card, labelIds: [] as string[] };
 
-  return res.status(201).json({ card });
+  const io = req.app.get("io") as Server;
+  io.to(list.boardId).emit("card:created", { card: cardWithLabels });
+
+  return res.status(201).json({ card: cardWithLabels });
 }
 
 const updateCardSchema = z.object({
@@ -127,11 +139,15 @@ export async function updateCard(req: AuthRequest, res: Response) {
         );
       }
 
-      return tx.card.findUniqueOrThrow({ where: { id: cardId } });
+      return tx.card.findUniqueOrThrow({
+        where: { id: cardId },
+        include: { cardLabels: { select: { labelId: true } } },
+      });
     });
+    const cardWithLabels = withLabelIds(updated);
 
-    io.to(destList.boardId).emit("card:moved", { card: updated, fromListId, toListId });
-    return res.json({ card: updated });
+    io.to(destList.boardId).emit("card:moved", { card: cardWithLabels, fromListId, toListId });
+    return res.json({ card: cardWithLabels });
   }
 
   if (title === undefined && description === undefined) {
@@ -144,10 +160,12 @@ export async function updateCard(req: AuthRequest, res: Response) {
       ...(title !== undefined ? { title } : {}),
       ...(description !== undefined ? { description } : {}),
     },
+    include: { cardLabels: { select: { labelId: true } } },
   });
+  const cardWithLabels = withLabelIds(updated);
 
-  io.to(sourceList.boardId).emit("card:updated", { card: updated });
-  return res.json({ card: updated });
+  io.to(sourceList.boardId).emit("card:updated", { card: cardWithLabels });
+  return res.json({ card: cardWithLabels });
 }
 
 /**

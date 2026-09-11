@@ -148,6 +148,7 @@ export interface CardItem {
   position: number;
   listId: string;
   createdAt: string;
+  labelIds: string[];
 }
 
 export interface ListItem {
@@ -157,8 +158,16 @@ export interface ListItem {
   cards: CardItem[];
 }
 
+export interface Label {
+  id: string;
+  boardId: string;
+  name: string | null;
+  color: string;
+}
+
 export interface BoardDetail extends Board {
   lists: ListItem[];
+  labels: Label[];
 }
 
 export interface Member {
@@ -344,3 +353,27 @@ export async function createAttachment(cardId: string, file: File): Promise<{ at
 
 export const deleteAttachment = (attachmentId: string) =>
   apiFetch<void>(`/attachments/${attachmentId}`, { method: "DELETE" });
+
+export const createLabel = (boardId: string, name: string | undefined, color: string) =>
+  apiFetch<{ label: Label }>(`/boards/${boardId}/labels`, {
+    method: "POST",
+    body: JSON.stringify({ name, color }),
+  });
+
+export const updateLabel = (labelId: string, data: { name?: string | null; color?: string }) =>
+  apiFetch<{ label: Label }>(`/labels/${labelId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+
+export const deleteLabel = (labelId: string) =>
+  apiFetch<void>(`/labels/${labelId}`, { method: "DELETE" });
+
+export const attachLabel = (cardId: string, labelId: string) =>
+  apiFetch<void>(`/cards/${cardId}/labels`, {
+    method: "POST",
+    body: JSON.stringify({ labelId }),
+  });
+
+export const detachLabel = (cardId: string, labelId: string) =>
+  apiFetch<void>(`/cards/${cardId}/labels/${labelId}`, { method: "DELETE" });

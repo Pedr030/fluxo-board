@@ -69,6 +69,8 @@ Já implementado em `backend/prisma/schema.prisma`. Resumo:
 | `Card` | title, description, position, listId, creatorId | pertence a uma `List` |
 | `Comment` | text, cardId, authorId, createdAt | pertence a um `Card` |
 | `Attachment` | cardId, uploaderId, filename, mimeType, size, url, createdAt | pertence a um `Card` |
+| `Label` | boardId, name, color | pertence a um `Board`, paleta compartilhada |
+| `CardLabel` | cardId, labelId | tabela de junção N:N Card↔Label |
 
 **Sobre `position` (ordenação de listas e cards):** a forma mais simples é
 usar inteiros e reindexar (0, 1, 2, ...) sempre que a ordem mudar dentro de
@@ -86,7 +88,7 @@ Todas as rotas abaixo (exceto `/auth/*`) exigem header
 | POST | `/auth/register` | cria usuário, devolve `{ user, token }` |
 | POST | `/auth/login` | autentica, devolve `{ user, token }` |
 | GET | `/boards` | lista boards do usuário logado |
-| POST | `/boards` | cria board `{ title }` |
+| POST | `/boards` | cria board `{ title }` (já nasce com 3 etiquetas: Alta/Média/Baixa) |
 | GET | `/boards/:id` | detalhe do board com lists+cards |
 | POST | `/boards/:id/invite` | adiciona membro `{ email }` |
 | POST | `/boards/:id/lists` | cria lista `{ title }` |
@@ -101,6 +103,15 @@ Todas as rotas abaixo (exceto `/auth/*`) exigem header
 | GET | `/cards/:id/attachments` | lista anexos do card, em ordem cronológica |
 | POST | `/cards/:id/attachments` | envia anexo (multipart, campo `file`; imagem, máx. 5MB) |
 | DELETE | `/attachments/:id` | remove anexo (só quem enviou) |
+| POST | `/boards/:id/labels` | cria etiqueta na paleta do board `{ name?, color }` |
+| PATCH | `/labels/:id` | edita nome/cor da etiqueta (afeta todo card que a usa) |
+| DELETE | `/labels/:id` | remove a etiqueta (e a associação em todo card) |
+| POST | `/cards/:id/labels` | aplica etiqueta no card `{ labelId }` (idempotente) |
+| DELETE | `/cards/:id/labels/:labelId` | remove etiqueta do card |
+
+`GET /boards/:id` já devolve `labels` (paleta do board inteiro) e cada
+card vem com `labelIds` — pequeno o bastante pra não precisar de rota
+separada, ao contrário de comentários/anexos.
 
 ## 5. Eventos de socket
 
@@ -121,6 +132,11 @@ com `board:leave` ao desmontar a página.
 | `comment:deleted` | `{ commentId, cardId }` | `DELETE /comments/:id` |
 | `attachment:created` | `{ attachment, cardId }` | `POST /cards/:id/attachments` |
 | `attachment:deleted` | `{ attachmentId, cardId }` | `DELETE /attachments/:id` |
+| `label:created` | `{ label }` | `POST /boards/:id/labels` |
+| `label:updated` | `{ label }` | `PATCH /labels/:id` |
+| `label:deleted` | `{ labelId, boardId }` | `DELETE /labels/:id` |
+| `card:label-added` | `{ cardId, labelId }` | `POST /cards/:id/labels` |
+| `card:label-removed` | `{ cardId, labelId }` | `DELETE /cards/:id/labels/:labelId` |
 
 Stub em `backend/src/sockets/boardSocket.ts` — os handlers de `join`/`leave`
 já existem, os eventos de mutação você adiciona junto com cada rota REST
@@ -155,15 +171,16 @@ pra próxima, o que ajuda demais quando você tá pareando com o Claude Code
 
 ### Stretch goals (só depois do MVP rodando e no ar)
 
-- Labels/etiquetas coloridas nos cards
-- Comentários em card
-- Anexos (upload de arquivo)
-- Histórico de atividade do board
-- Modo escuro (o guia de identidade visual já tem os tokens prontos)
-- Testes automatizados (Jest no backend; um teste e2e simples com dois
-  clientes de socket provando a sincronização é ótimo argumento de
-  entrevista)
-- CI (GitHub Actions rodando lint + testes a cada push)
+- ~~Labels/etiquetas coloridas nos cards~~ — feito
+- ~~Comentários em card~~ — feito
+- ~~Anexos (upload de arquivo)~~ — feito
+- ~~Modo escuro~~ — feito
+- ~~Testes automatizados~~ — feito (Jest no backend, incluindo testes de
+  socket com dois clientes provando a sincronização em tempo real)
+- ~~CI (GitHub Actions rodando lint + testes a cada push)~~ — feito
+- Histórico de atividade do board (quem fez o quê e quando)
+- Checklist dentro do card
+- Data de vencimento (due date) no card
 
 ## 7. Autenticação — detalhes
 

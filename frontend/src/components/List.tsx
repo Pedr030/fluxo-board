@@ -5,6 +5,7 @@ import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  Label,
   createCard as apiCreateCard,
   deleteList as apiDeleteList,
   updateList as apiUpdateList,
@@ -33,7 +34,15 @@ export interface ListData {
  * a tela é o listener de socket no Board ("list:updated"/"list:deleted"/
  * "list:moved").
  */
-export function List({ list }: { list: ListData }) {
+export function List({
+  list,
+  labels,
+  boardId,
+}: {
+  list: ListData;
+  labels: Label[];
+  boardId: string;
+}) {
   const {
     attributes,
     listeners,
@@ -153,7 +162,7 @@ export function List({ list }: { list: ListData }) {
       <div ref={setDroppableRef} className="flex min-h-[40px] flex-col gap-3">
         <SortableContext items={list.cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
           {list.cards.map((card) => (
-            <Card key={card.id} card={card} />
+            <Card key={card.id} card={card} labels={labels} boardId={boardId} />
           ))}
         </SortableContext>
       </div>

@@ -22,8 +22,10 @@ import {
 import { getSocket } from "@/lib/socket";
 import {
   ApiError,
+  Label,
   Member,
   createList as apiCreateList,
+  deleteLabel as apiDeleteLabel,
   getBoard,
   inviteMember as apiInviteMember,
   listMembers,
@@ -32,7 +34,9 @@ import {
 } from "@/lib/api";
 import { Avatar } from "./Avatar";
 import { CardData, CardView } from "./Card";
-import { ArrowLeftIcon, UserIcon } from "./icons";
+import { CardTile } from "./CardTile";
+import { CreateLabelForm } from "./CreateLabelForm";
+import { ArrowLeftIcon, SidebarIcon, TrashIcon, UserIcon } from "./icons";
 import { List, ListData } from "./List";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -104,9 +108,13 @@ export function Board({ boardId }: { boardId: string }) {
   const [inviting, setInviting] = useState(false);
   const [myRole, setMyRole] = useState<"OWNER" | "MEMBER" | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
-  const [view, setView] = useState<"board" | "members">("board");
+  const [view, setView] = useState<"board" | "members" | "labels">("board");
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [labels, setLabels] = useState<Label[]>([]);
+  const [labelFilterId, setLabelFilterId] = useState<string | null>(null);
+  const [labelSidebarCollapsed, setLabelSidebarCollapsed] = useState(false);
+  const [labelSidebarError, setLabelSidebarError] = useState<string | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -128,6 +136,7 @@ export function Board({ boardId }: { boardId: string }) {
         setLists(board.lists);
         setMyRole(board.myRole);
         setMembers(members);
+        setLabels(board.labels);
       })
       .catch((err) => {
         if (err instanceof ApiError && err.status === 403) {
@@ -217,6 +226,58 @@ export function Board({ boardId }: { boardId: string }) {
       setLoadError("Esse board foi excluído pelo dono.");
     }
 
+    function handleLabelCreated({ label }: { label: Label }) {
+      setLabels((prev) => [...prev, label]);
+    }
+
+    function handleLabelUpdated({ label }: { label: Label }) {
+      setLabels((prev) => prev.map((l) => (l.id === label.id ? label : l)));
+    }
+
+    function handleLabelDeleted({ labelId }: { labelId: string }) {
+      setLabels((prev) => prev.filter((l) => l.id !== labelId));
+      // A etiqueta some da paleta do board inteiro — precisa tirar esse
+      // labelId de qualquer card que a usava também, senão a tela ainda
+      // mostraria a pill (o cascade que apagou a associação foi só no
+      // banco, não sabe nada sobre o estado local do React).
+      setLists((prev) =>
+        prev.map((list) => ({
+          ...list,
+          cards: list.cards.map((c) => ({
+            ...c,
+            labelIds: c.labelIds.filter((id) => id !== labelId),
+          })),
+        }))
+      );
+      // Se a etiqueta excluída era o filtro ativo na aba "Por etiqueta",
+      // não faz sentido continuar filtrando por algo que não existe mais.
+      setLabelFilterId((current) => (current === labelId ? null : current));
+    }
+
+    function handleCardLabelAdded({ cardId, labelId }: { cardId: string; labelId: string }) {
+      setLists((prev) =>
+        prev.map((list) => ({
+          ...list,
+          cards: list.cards.map((c) =>
+            c.id === cardId && !c.labelIds.includes(labelId)
+              ? { ...c, labelIds: [...c.labelIds, labelId] }
+              : c
+          ),
+        }))
+      );
+    }
+
+    function handleCardLabelRemoved({ cardId, labelId }: { cardId: string; labelId: string }) {
+      setLists((prev) =>
+        prev.map((list) => ({
+          ...list,
+          cards: list.cards.map((c) =>
+            c.id === cardId ? { ...c, labelIds: c.labelIds.filter((id) => id !== labelId) } : c
+          ),
+        }))
+      );
+    }
+
     socket.on("list:created", handleListCreated);
     socket.on("list:updated", handleListUpdated);
     socket.on("list:deleted", handleListDeleted);
@@ -227,6 +288,11 @@ export function Board({ boardId }: { boardId: string }) {
     socket.on("card:deleted", handleCardDeleted);
     socket.on("presence:update", handlePresenceUpdate);
     socket.on("board:deleted", handleBoardDeleted);
+    socket.on("label:created", handleLabelCreated);
+    socket.on("label:updated", handleLabelUpdated);
+    socket.on("label:deleted", handleLabelDeleted);
+    socket.on("card:label-added", handleCardLabelAdded);
+    socket.on("card:label-removed", handleCardLabelRemoved);
 
     return () => {
       socket.emit("board:leave", boardId);
@@ -240,6 +306,11 @@ export function Board({ boardId }: { boardId: string }) {
       socket.off("card:deleted", handleCardDeleted);
       socket.off("presence:update", handlePresenceUpdate);
       socket.off("board:deleted", handleBoardDeleted);
+      socket.off("label:created", handleLabelCreated);
+      socket.off("label:updated", handleLabelUpdated);
+      socket.off("label:deleted", handleLabelDeleted);
+      socket.off("card:label-added", handleCardLabelAdded);
+      socket.off("card:label-removed", handleCardLabelRemoved);
       setOnlineUsers([]);
     };
   }, [boardId]);
@@ -281,6 +352,15 @@ export function Board({ boardId }: { boardId: string }) {
       }
     } finally {
       setInviting(false);
+    }
+  }
+
+  async function handleDeleteLabel(labelId: string) {
+    setLabelSidebarError(null);
+    try {
+      await apiDeleteLabel(labelId);
+    } catch {
+      setLabelSidebarError("Não foi possível excluir a etiqueta.");
     }
   }
 
@@ -392,7 +472,7 @@ export function Board({ boardId }: { boardId: string }) {
           {actionError}
         </div>
       )}
-      <div className="flex items-center justify-between gap-4 p-6 pb-0">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 p-6 pb-4">
         <Link
           href="/boards"
           aria-label="Voltar pros boards"
@@ -402,7 +482,7 @@ export function Board({ boardId }: { boardId: string }) {
           <ArrowLeftIcon className="h-5 w-5" />
         </Link>
 
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           {onlineUsers.length > 0 && (
             <div className="flex items-center gap-2">
               <div className="flex -space-x-2" title={onlineUsers.map((u) => u.name).join(", ")}>
@@ -431,6 +511,14 @@ export function Board({ boardId }: { boardId: string }) {
               }`}
             >
               Quadro
+            </button>
+            <button
+              onClick={() => setView("labels")}
+              className={`rounded-card px-4 py-1.5 text-sm font-medium transition-colors ${
+                view === "labels" ? "bg-surface text-ink shadow-card" : "text-ink-soft"
+              }`}
+            >
+              Por etiqueta
             </button>
             <button
               onClick={() => setView("members")}
@@ -507,6 +595,170 @@ export function Board({ boardId }: { boardId: string }) {
             </p>
           )}
         </div>
+      ) : view === "labels" ? (
+        <div className="flex flex-1 overflow-hidden">
+          <div
+            className={`flex shrink-0 flex-col gap-3 overflow-y-auto rounded-list border border-surface-border bg-surface/70 transition-all ${
+              labelSidebarCollapsed ? "m-0 w-0 border-0 p-0" : "my-6 ml-6 w-72 p-4"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="font-display text-sm font-semibold text-ink">Etiquetas</h3>
+              <button
+                onClick={() => setLabelSidebarCollapsed(true)}
+                aria-label="Recolher etiquetas"
+                className="shrink-0 rounded-full p-1.5 text-ink-soft transition-colors hover:bg-surface-border/50 hover:text-ink"
+              >
+                <SidebarIcon className="h-4 w-4" />
+              </button>
+            </div>
+            <button
+              onClick={() => setLabelFilterId(null)}
+              className={`rounded-card px-3 py-1.5 text-left text-sm font-medium transition-colors ${
+                labelFilterId === null ? "bg-surface text-ink shadow-card" : "text-ink-soft hover:bg-surface-border/30"
+              }`}
+            >
+              Todas
+            </button>
+            <div className="flex flex-col gap-1">
+              {labels.map((label) => {
+                const count = lists.flatMap((l) => l.cards).filter((c) => c.labelIds.includes(label.id)).length;
+                const active = labelFilterId === label.id;
+                return (
+                  <div key={label.id} className="group flex items-center gap-1">
+                    <button
+                      onClick={() => setLabelFilterId(active ? null : label.id)}
+                      className={`flex flex-1 items-center gap-2 rounded-card px-2 py-1.5 text-left text-sm transition-colors ${
+                        active ? "bg-surface shadow-card" : "hover:bg-surface-border/30"
+                      }`}
+                    >
+                      <span
+                        style={{ backgroundColor: label.color }}
+                        className="h-3 w-3 shrink-0 rounded-full"
+                      />
+                      <span className="flex-1 truncate text-ink">{label.name || "Sem nome"}</span>
+                      <span className="shrink-0 text-xs text-ink-soft">({count})</span>
+                    </button>
+                    <button
+                      onClick={() => handleDeleteLabel(label.id)}
+                      aria-label={`Excluir etiqueta${label.name ? ` ${label.name}` : ""}`}
+                      className="shrink-0 rounded-full p-1 text-ink-soft opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-600 group-hover:opacity-100"
+                    >
+                      <TrashIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            {labelSidebarError && (
+              <p className="text-sm text-red-600 dark:text-red-400">{labelSidebarError}</p>
+            )}
+            <div className="mt-2 border-t border-surface-border pt-3">
+              <p className="mb-2 text-xs font-medium text-ink-soft">Criar etiqueta</p>
+              <CreateLabelForm boardId={boardId} />
+            </div>
+          </div>
+
+          <div className="relative flex flex-1 flex-col">
+            {labelSidebarCollapsed && (
+              <button
+                onClick={() => setLabelSidebarCollapsed(false)}
+                aria-label="Expandir etiquetas"
+                className="absolute left-2 top-2 z-10 rounded-full border border-surface-border bg-surface p-1.5 text-ink-soft shadow-card transition-colors hover:text-ink"
+              >
+                <SidebarIcon className="h-4 w-4" />
+              </button>
+            )}
+
+            {labelFilterId ? (
+              (() => {
+                const label = labels.find((l) => l.id === labelFilterId);
+                const cardsWithLabel = lists
+                  .flatMap((l) => l.cards)
+                  .filter((c) => c.labelIds.includes(labelFilterId));
+                return (
+                  <main
+                    className={`flex flex-1 flex-col gap-3 overflow-y-auto p-6 ${
+                      labelSidebarCollapsed ? "pt-14" : ""
+                    }`}
+                  >
+                    <div className="mx-auto flex w-full max-w-md flex-col gap-3">
+                      <div className="flex items-center gap-2">
+                        <span
+                          style={{ backgroundColor: label?.color }}
+                          className="h-3 w-3 shrink-0 rounded-full"
+                        />
+                        <h3 className="font-display text-base font-semibold text-ink">
+                          {label?.name || "Sem nome"}
+                        </h3>
+                        <span className="text-sm text-ink-soft">({cardsWithLabel.length})</span>
+                      </div>
+                      {cardsWithLabel.map((card) => (
+                        <CardTile key={card.id} card={card} labels={labels} boardId={boardId} />
+                      ))}
+                      {cardsWithLabel.length === 0 && (
+                        <p className="text-sm text-ink-soft">Nenhum card com essa etiqueta.</p>
+                      )}
+                    </div>
+                  </main>
+                );
+              })()
+            ) : (
+              <main
+                className={`flex flex-1 gap-5 overflow-x-auto p-6 ${
+                  labelSidebarCollapsed ? "pt-14" : ""
+                }`}
+              >
+                {labels.map((label) => {
+                  const cardsWithLabel = lists
+                    .flatMap((l) => l.cards)
+                    .filter((c) => c.labelIds.includes(label.id));
+                  return (
+                    <div
+                      key={label.id}
+                      className="flex w-80 shrink-0 flex-col gap-3 rounded-list border border-surface-border bg-surface/70 p-4"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          style={{ backgroundColor: label.color }}
+                          className="h-3 w-3 shrink-0 rounded-full"
+                        />
+                        <h3 className="font-display text-base font-semibold text-ink">
+                          {label.name || "Sem nome"}
+                        </h3>
+                        <span className="text-sm text-ink-soft">({cardsWithLabel.length})</span>
+                      </div>
+                      <div className="flex flex-col gap-3">
+                        {cardsWithLabel.map((card) => (
+                          <CardTile key={card.id} card={card} labels={labels} boardId={boardId} />
+                        ))}
+                        {cardsWithLabel.length === 0 && (
+                          <p className="text-sm text-ink-soft">Nenhum card com essa etiqueta.</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {(() => {
+                  const unlabeled = lists.flatMap((l) => l.cards).filter((c) => c.labelIds.length === 0);
+                  return (
+                    <div className="flex w-80 shrink-0 flex-col gap-3 rounded-list border border-surface-border bg-surface/70 p-4">
+                      <h3 className="font-display text-base font-semibold text-ink">
+                        Sem etiqueta ({unlabeled.length})
+                      </h3>
+                      <div className="flex flex-col gap-3">
+                        {unlabeled.map((card) => (
+                          <CardTile key={card.id} card={card} labels={labels} boardId={boardId} />
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+              </main>
+            )}
+          </div>
+        </div>
       ) : (
         <DndContext
           sensors={sensors}
@@ -520,7 +772,7 @@ export function Board({ boardId }: { boardId: string }) {
               strategy={horizontalListSortingStrategy}
             >
               {lists.map((list) => (
-                <List key={list.id} list={list} />
+                <List key={list.id} list={list} labels={labels} boardId={boardId} />
               ))}
             </SortableContext>
 

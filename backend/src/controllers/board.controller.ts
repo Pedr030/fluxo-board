@@ -28,6 +28,17 @@ const createBoardSchema = z.object({
   title: z.string().min(1),
 });
 
+// Toda board nova já nasce com essas 3 — cobre o caso de uso mais comum
+// (priorizar tarefas) sem exigir que a pessoa abra o seletor de etiquetas
+// e crie do zero. Só se aplica a boards criados a partir de agora — não
+// mexe retroativamente em boards existentes, que podem já ter etiquetas
+// próprias.
+const DEFAULT_LABELS = [
+  { name: "Alta", color: "#ef4444" },
+  { name: "Média", color: "#f97316" },
+  { name: "Baixa", color: "#22c55e" },
+];
+
 /**
  * POST /boards  { title: string }
  * Cria o board com ownerId = req.userId e já cria o BoardMember
@@ -48,6 +59,9 @@ export async function createBoard(req: AuthRequest, res: Response) {
     });
     await tx.boardMember.create({
       data: { boardId: created.id, userId, role: "OWNER" },
+    });
+    await tx.label.createMany({
+      data: DEFAULT_LABELS.map((label) => ({ ...label, boardId: created.id })),
     });
     return created;
   });
@@ -75,8 +89,19 @@ export async function getBoard(req: AuthRequest, res: Response) {
     include: {
       lists: {
         orderBy: { position: "asc" },
-        include: { cards: { orderBy: { position: "asc" } } },
+        include: {
+          cards: {
+            orderBy: { position: "asc" },
+            include: { cardLabels: { select: { labelId: true } } },
+          },
+        },
       },
+      // Paleta de etiquetas do board inteiro — pequena o bastante (ao
+      // contrário de comentários/anexos) pra vir junto do board sem
+      // precisar de outra requisição. Cada card só carrega os `labelId`s
+      // que usa (cardLabels acima); nome/cor de cada etiqueta o frontend
+      // resolve cruzando com essa paleta.
+      labels: true,
     },
   });
 
@@ -91,7 +116,15 @@ export async function getBoard(req: AuthRequest, res: Response) {
     return res.status(403).json({ error: "Você não é membro deste board" });
   }
 
-  return res.json({ board: { ...board, myRole: membership.role } });
+  const lists = board.lists.map((list) => ({
+    ...list,
+    cards: list.cards.map(({ cardLabels, ...card }) => ({
+      ...card,
+      labelIds: cardLabels.map((cl) => cl.labelId),
+    })),
+  }));
+
+  return res.json({ board: { ...board, lists, myRole: membership.role } });
 }
 
 const inviteSchema = z.object({

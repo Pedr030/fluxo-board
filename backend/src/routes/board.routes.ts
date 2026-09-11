@@ -8,6 +8,7 @@ import {
   listBoards,
   listMembers,
 } from "../controllers/board.controller";
+import { createLabel } from "../controllers/label.controller";
 import { createList } from "../controllers/list.controller";
 
 export const boardRouter = Router();
@@ -20,7 +21,5 @@ boardRouter.get("/:id", getBoard);
 boardRouter.post("/:id/invite", inviteMember);
 boardRouter.get("/:id/members", listMembers);
 boardRouter.post("/:id/lists", createList);
+boardRouter.post("/:id/labels", createLabel);
 boardRouter.delete("/:id", deleteBoard);
-
-// TODO: PATCH /lists/:id (renomear/reordenar lista) e editar/excluir card
-// entram na etapa de polish do roadmap.

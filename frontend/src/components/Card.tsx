@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { deleteCard as apiDeleteCard } from "@/lib/api";
+import { Label, deleteCard as apiDeleteCard } from "@/lib/api";
 import { CardDetailModal } from "./CardDetailModal";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { TrashIcon } from "./icons";
@@ -13,6 +13,7 @@ export interface CardData {
   title: string;
   description?: string | null;
   createdAt?: string;
+  labelIds: string[];
 }
 
 /**
@@ -31,6 +32,41 @@ export function CardView({ card }: { card: CardData }) {
 }
 
 /**
+ * Corpo visual do card (pills de etiqueta + título + prévia da descrição)
+ * — usado tanto pelo `Card` arrastável (dentro de uma lista) quanto pelo
+ * `CardTile` estático (aba "Por etiqueta", que agrupa por etiqueta em vez
+ * de por lista e por isso não usa dnd-kit).
+ */
+export function CardBody({ card, labels }: { card: CardData; labels: Label[] }) {
+  return (
+    <>
+      {card.labelIds.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1">
+          {card.labelIds.map((labelId) => {
+            const label = labels.find((l) => l.id === labelId);
+            if (!label) return null;
+            return (
+              <span
+                key={labelId}
+                style={{ backgroundColor: label.color }}
+                className="h-2 w-8 rounded-full"
+                title={label.name ?? undefined}
+              />
+            );
+          })}
+        </div>
+      )}
+      <p>{card.title}</p>
+      {card.description && (
+        <p className="mt-2 line-clamp-2 break-words text-sm font-normal text-ink-soft">
+          {card.description}
+        </p>
+      )}
+    </>
+  );
+}
+
+/**
  * Card arrastável dentro de uma lista. Clicar nele abre o painel de
  * detalhes (`CardDetailModal` — título e descrição vivem lá, estilo
  * Trello) em vez de editar o título direto no quadro. Excluir não
@@ -45,7 +81,15 @@ export function CardView({ card }: { card: CardData }) {
  * Board), então um clique parado continua abrindo o modal normalmente
  * sem bloquear o drag.
  */
-export function Card({ card }: { card: CardData }) {
+export function Card({
+  card,
+  labels,
+  boardId,
+}: {
+  card: CardData;
+  labels: Label[];
+  boardId: string;
+}) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
     data: { type: "card" },
@@ -86,12 +130,7 @@ export function Card({ card }: { card: CardData }) {
           onClick={() => setDetailOpen(true)}
           className="cursor-pointer rounded-card border border-surface-border bg-surface p-4 pr-8 text-base font-medium text-ink shadow-card transition-shadow hover:shadow-none"
         >
-          <p>{card.title}</p>
-          {card.description && (
-            <p className="mt-2 line-clamp-2 break-words text-sm font-normal text-ink-soft">
-              {card.description}
-            </p>
-          )}
+          <CardBody card={card} labels={labels} />
         </div>
       </div>
       <button
@@ -113,6 +152,8 @@ export function Card({ card }: { card: CardData }) {
       />
       <CardDetailModal
         card={card}
+        labels={labels}
+        boardId={boardId}
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
         onDelete={() => setConfirmOpen(true)}

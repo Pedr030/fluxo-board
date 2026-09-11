@@ -9,6 +9,7 @@ import { authRouter } from "./routes/auth.routes";
 import { boardRouter } from "./routes/board.routes";
 import { cardRouter } from "./routes/card.routes";
 import { commentRouter } from "./routes/comment.routes";
+import { labelRouter } from "./routes/label.routes";
 import { listRouter } from "./routes/list.routes";
 import { meRouter } from "./routes/me.routes";
 import { globalLimiter } from "./middleware/rateLimit";
@@ -45,6 +46,7 @@ export function createApp(frontendUrl: string) {
   app.use("/cards", cardRouter);
   app.use("/comments", commentRouter);
   app.use("/attachments", attachmentRouter);
+  app.use("/labels", labelRouter);
 
   // Handler de erro global — precisa ser o último app.use. Com
   // "express-async-errors" importado lá em cima, um throw (ou rejection)

@@ -4,10 +4,14 @@ import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import {
   Attachment,
   Comment,
+  Label,
+  attachLabel as apiAttachLabel,
   createAttachment as apiCreateAttachment,
   createComment as apiCreateComment,
   deleteAttachment as apiDeleteAttachment,
   deleteComment as apiDeleteComment,
+  deleteLabel as apiDeleteLabel,
+  detachLabel as apiDetachLabel,
   getMe,
   listAttachments,
   listComments,
@@ -16,7 +20,8 @@ import {
 import { getSocket } from "@/lib/socket";
 import { Avatar } from "./Avatar";
 import { CardData } from "./Card";
-import { CameraIcon, TrashIcon, XIcon } from "./icons";
+import { CreateLabelForm } from "./CreateLabelForm";
+import { CameraIcon, CheckIcon, PlusIcon, TrashIcon, XIcon } from "./icons";
 
 /**
  * Painel de detalhes do card (estilo Trello: clicar no card abre isso em
@@ -39,11 +44,15 @@ import { CameraIcon, TrashIcon, XIcon } from "./icons";
  */
 export function CardDetailModal({
   card,
+  labels,
+  boardId,
   open,
   onClose,
   onDelete,
 }: {
   card: CardData;
+  labels: Label[];
+  boardId: string;
   open: boolean;
   onClose: () => void;
   onDelete: () => void;
@@ -65,6 +74,8 @@ export function CardDetailModal({
   const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const [labelActionError, setLabelActionError] = useState<string | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -87,13 +98,15 @@ export function CardDetailModal({
       // aberta), só fecha o modal inteiro quando não tem nenhum lightbox.
       if (lightboxUrl) {
         setLightboxUrl(null);
+      } else if (labelPickerOpen) {
+        setLabelPickerOpen(false);
       } else {
         onClose();
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose, lightboxUrl]);
+  }, [open, onClose, lightboxUrl, labelPickerOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -233,6 +246,28 @@ export function CardDetailModal({
     }
   }
 
+  async function handleToggleLabel(labelId: string) {
+    setLabelActionError(null);
+    try {
+      if (card.labelIds.includes(labelId)) {
+        await apiDetachLabel(card.id, labelId);
+      } else {
+        await apiAttachLabel(card.id, labelId);
+      }
+    } catch {
+      setLabelActionError("Não foi possível atualizar a etiqueta.");
+    }
+  }
+
+  async function handleDeleteLabel(labelId: string) {
+    setLabelActionError(null);
+    try {
+      await apiDeleteLabel(labelId);
+    } catch {
+      setLabelActionError("Não foi possível excluir a etiqueta.");
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-stretch justify-start bg-black/30 p-6"
@@ -289,6 +324,90 @@ export function CardDetailModal({
             </div>
           </div>
           {titleError && <p className="text-sm text-red-600 dark:text-red-400">{titleError}</p>}
+
+          <div className="relative flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-ink-soft">Etiquetas</h3>
+              <button
+                onClick={() => setLabelPickerOpen((v) => !v)}
+                aria-label="Gerenciar etiquetas"
+                className="rounded-full p-1.5 text-ink-soft transition-colors hover:bg-surface-border/50 hover:text-ink"
+              >
+                <PlusIcon className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {card.labelIds.length === 0 && (
+                <p className="text-sm text-ink-soft">Nenhuma etiqueta.</p>
+              )}
+              {card.labelIds.map((labelId) => {
+                const label = labels.find((l) => l.id === labelId);
+                if (!label) return null;
+                return (
+                  <span
+                    key={label.id}
+                    style={{ backgroundColor: label.color }}
+                    className="rounded-full px-3 py-1 text-xs font-medium text-white"
+                  >
+                    {label.name || "    "}
+                  </span>
+                );
+              })}
+            </div>
+            {labelActionError && (
+              <p className="text-sm text-red-600 dark:text-red-400">{labelActionError}</p>
+            )}
+
+            {labelPickerOpen && (
+              <>
+                <div className="fixed inset-0 z-[65]" onClick={() => setLabelPickerOpen(false)} />
+                <div
+                  className="absolute right-0 top-8 z-[66] w-64 rounded-card border border-surface-border bg-surface p-3 shadow-card"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <p className="mb-2 text-xs font-medium text-ink-soft">Etiquetas do board</p>
+                  <div className="flex max-h-40 flex-col gap-1 overflow-y-auto">
+                    {labels.length === 0 && (
+                      <p className="text-sm text-ink-soft">Nenhuma etiqueta criada ainda.</p>
+                    )}
+                    {labels.map((label) => {
+                      const applied = card.labelIds.includes(label.id);
+                      return (
+                        <div key={label.id} className="group flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleLabel(label.id)}
+                            className="flex flex-1 items-center gap-2 rounded-card px-1 py-1 text-left hover:bg-surface-border/30"
+                          >
+                            <span
+                              style={{ backgroundColor: label.color }}
+                              className="flex h-7 flex-1 items-center rounded-card px-2 text-xs font-medium text-white"
+                            >
+                              {label.name}
+                            </span>
+                            {applied && <CheckIcon className="h-4 w-4 shrink-0 text-ink" />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteLabel(label.id)}
+                            aria-label={`Excluir etiqueta${label.name ? ` ${label.name}` : ""}`}
+                            className="shrink-0 rounded-full p-1 text-ink-soft opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-600 group-hover:opacity-100"
+                          >
+                            <TrashIcon className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-3 border-t border-surface-border pt-3">
+                    <p className="mb-2 text-xs font-medium text-ink-soft">Criar etiqueta</p>
+                    <CreateLabelForm boardId={boardId} />
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="card-detail-description" className="text-sm font-medium text-ink-soft">
