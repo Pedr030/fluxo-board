@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Label, deleteCard as apiDeleteCard } from "@/lib/api";
+import { ChecklistItem, Label, deleteCard as apiDeleteCard } from "@/lib/api";
 import { CardDetailModal } from "./CardDetailModal";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { TrashIcon } from "./icons";
+import { CheckIcon, TrashIcon } from "./icons";
 
 export interface CardData {
   id: string;
@@ -14,6 +14,7 @@ export interface CardData {
   description?: string | null;
   createdAt?: string;
   labelIds: string[];
+  checklistItems: ChecklistItem[];
 }
 
 /**
@@ -61,6 +62,18 @@ export function CardBody({ card, labels }: { card: CardData; labels: Label[] }) 
         <p className="mt-2 line-clamp-2 break-words text-sm font-normal text-ink-soft">
           {card.description}
         </p>
+      )}
+      {card.checklistItems.length > 0 && (
+        <div
+          className={`mt-2 flex w-fit items-center gap-1 rounded-card px-1.5 py-0.5 text-xs font-medium ${
+            card.checklistItems.every((i) => i.done)
+              ? "bg-flow-100 text-flow-700 dark:bg-flow-500/20 dark:text-flow-400"
+              : "bg-surface-border/50 text-ink-soft"
+          }`}
+        >
+          <CheckIcon className="h-3 w-3" />
+          {card.checklistItems.filter((i) => i.done).length}/{card.checklistItems.length}
+        </div>
       )}
     </>
   );
@@ -119,7 +132,7 @@ export function Card({
   }
 
   return (
-    <div ref={setNodeRef} style={style} className="group relative">
+    <div ref={setNodeRef} style={style} className="group/card relative">
       <div
         {...attributes}
         {...listeners}
@@ -136,7 +149,7 @@ export function Card({
       <button
         onClick={() => setConfirmOpen(true)}
         onPointerDown={(e) => e.stopPropagation()}
-        className="absolute right-1 top-1 hidden rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover:block"
+        className="absolute right-1 top-1 hidden rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover/card:block"
         aria-label="Excluir card"
       >
         <TrashIcon className="h-3.5 w-3.5" />

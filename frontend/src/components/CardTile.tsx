@@ -43,7 +43,7 @@ export function CardTile({
   }
 
   return (
-    <div className="group relative">
+    <div className="group/card relative">
       <div
         onClick={() => setDetailOpen(true)}
         className="cursor-pointer rounded-card border border-surface-border bg-surface p-4 pr-8 text-base font-medium text-ink shadow-card transition-shadow hover:shadow-none"
@@ -52,7 +52,7 @@ export function CardTile({
       </div>
       <button
         onClick={() => setConfirmOpen(true)}
-        className="absolute right-1 top-1 hidden rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover:block"
+        className="absolute right-1 top-1 hidden rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover/card:block"
         aria-label="Excluir card"
       >
         <TrashIcon className="h-3.5 w-3.5" />

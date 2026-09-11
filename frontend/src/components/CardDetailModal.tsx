@@ -3,12 +3,15 @@
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import {
   Attachment,
+  ChecklistItem,
   Comment,
   Label,
   attachLabel as apiAttachLabel,
   createAttachment as apiCreateAttachment,
+  createChecklistItem as apiCreateChecklistItem,
   createComment as apiCreateComment,
   deleteAttachment as apiDeleteAttachment,
+  deleteChecklistItem as apiDeleteChecklistItem,
   deleteComment as apiDeleteComment,
   deleteLabel as apiDeleteLabel,
   detachLabel as apiDetachLabel,
@@ -16,6 +19,7 @@ import {
   listAttachments,
   listComments,
   updateCard as apiUpdateCard,
+  updateChecklistItem as apiUpdateChecklistItem,
 } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 import { Avatar } from "./Avatar";
@@ -76,6 +80,13 @@ export function CardDetailModal({
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
   const [labelActionError, setLabelActionError] = useState<string | null>(null);
+  const [addItemFormOpen, setAddItemFormOpen] = useState(false);
+  const [newItemText, setNewItemText] = useState("");
+  const [addingItem, setAddingItem] = useState(false);
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingItemText, setEditingItemText] = useState("");
+  const [checklistError, setChecklistError] = useState<string | null>(null);
+  const newItemInputRef = useRef<HTMLInputElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -268,6 +279,56 @@ export function CardDetailModal({
     }
   }
 
+  async function handleAddChecklistItem(e: FormEvent) {
+    e.preventDefault();
+    const trimmed = newItemText.trim();
+    if (!trimmed) return;
+    setAddingItem(true);
+    setChecklistError(null);
+    try {
+      await apiCreateChecklistItem(card.id, trimmed);
+      setNewItemText("");
+      // Igual Trello: depois de adicionar, o campo continua aberto e em
+      // foco, pronto pro próximo item — só fecha quando a pessoa clica
+      // fora ou aperta Escape. Sem isso, adicionar vários itens seguidos
+      // exigiria reabrir o formulário a cada um.
+      newItemInputRef.current?.focus();
+    } catch {
+      setChecklistError("Não foi possível adicionar o item.");
+    } finally {
+      setAddingItem(false);
+    }
+  }
+
+  async function handleToggleChecklistItem(item: ChecklistItem) {
+    setChecklistError(null);
+    try {
+      await apiUpdateChecklistItem(item.id, { done: !item.done });
+    } catch {
+      setChecklistError("Não foi possível atualizar o item.");
+    }
+  }
+
+  async function handleSaveChecklistItemText(item: ChecklistItem) {
+    setEditingItemId(null);
+    const trimmed = editingItemText.trim();
+    if (!trimmed || trimmed === item.text) return;
+    try {
+      await apiUpdateChecklistItem(item.id, { text: trimmed });
+    } catch {
+      setChecklistError("Não foi possível salvar o item.");
+    }
+  }
+
+  async function handleDeleteChecklistItem(itemId: string) {
+    setChecklistError(null);
+    try {
+      await apiDeleteChecklistItem(itemId);
+    } catch {
+      setChecklistError("Não foi possível excluir o item.");
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-stretch justify-start bg-black/30 p-6"
@@ -373,7 +434,7 @@ export function CardDetailModal({
                     {labels.map((label) => {
                       const applied = card.labelIds.includes(label.id);
                       return (
-                        <div key={label.id} className="group flex items-center gap-1">
+                        <div key={label.id} className="group/label flex items-center gap-1">
                           <button
                             type="button"
                             onClick={() => handleToggleLabel(label.id)}
@@ -391,7 +452,7 @@ export function CardDetailModal({
                             type="button"
                             onClick={() => handleDeleteLabel(label.id)}
                             aria-label={`Excluir etiqueta${label.name ? ` ${label.name}` : ""}`}
-                            className="shrink-0 rounded-full p-1 text-ink-soft opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-600 group-hover:opacity-100"
+                            className="shrink-0 rounded-full p-1 text-ink-soft opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-600 group-hover/label:opacity-100"
                           >
                             <TrashIcon className="h-3.5 w-3.5" />
                           </button>
@@ -441,6 +502,120 @@ export function CardDetailModal({
 
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-ink-soft">Checklist</h3>
+              <button
+                onClick={() => setAddItemFormOpen(true)}
+                aria-label="Adicionar item"
+                className="rounded-full p-1.5 text-ink-soft transition-colors hover:bg-surface-border/50 hover:text-ink"
+              >
+                <PlusIcon className="h-4 w-4" />
+              </button>
+            </div>
+            {card.checklistItems.length > 0 && (
+              <div className="flex items-center gap-2">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-border/50">
+                  <div
+                    className="h-full rounded-full bg-flow-500 transition-all"
+                    style={{
+                      width: `${
+                        (card.checklistItems.filter((i) => i.done).length /
+                          card.checklistItems.length) *
+                        100
+                      }%`,
+                    }}
+                  />
+                </div>
+                <span className="shrink-0 text-xs text-ink-soft">
+                  {card.checklistItems.filter((i) => i.done).length}/{card.checklistItems.length}
+                </span>
+              </div>
+            )}
+            <div className="flex flex-col gap-1">
+              {card.checklistItems.map((item) => (
+                <div key={item.id} className="group/checklist-item flex items-center gap-2">
+                  <button
+                    onClick={() => handleToggleChecklistItem(item)}
+                    aria-label={item.done ? "Desmarcar item" : "Marcar item como feito"}
+                    className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-card border transition-colors ${
+                      item.done
+                        ? "border-flow-500 bg-flow-500 text-white"
+                        : "border-surface-border text-transparent hover:border-brand-400"
+                    }`}
+                  >
+                    <CheckIcon className="h-3.5 w-3.5" />
+                  </button>
+                  {editingItemId === item.id ? (
+                    <input
+                      autoFocus
+                      value={editingItemText}
+                      onChange={(e) => setEditingItemText(e.target.value)}
+                      onBlur={() => handleSaveChecklistItemText(item)}
+                      onKeyDown={(e) => e.key === "Enter" && handleSaveChecklistItemText(item)}
+                      className="flex-1 border-b border-brand-300 bg-transparent text-sm text-ink outline-none"
+                    />
+                  ) : (
+                    <p
+                      onClick={() => {
+                        setEditingItemId(item.id);
+                        setEditingItemText(item.text);
+                      }}
+                      className={`flex-1 cursor-text text-sm ${
+                        item.done ? "text-ink-soft line-through" : "text-ink"
+                      }`}
+                    >
+                      {item.text}
+                    </p>
+                  )}
+                  <button
+                    onClick={() => handleDeleteChecklistItem(item.id)}
+                    aria-label="Excluir item"
+                    className="hidden shrink-0 rounded-full p-1 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover/checklist-item:block"
+                  >
+                    <XIcon className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+            {checklistError && (
+              <p className="text-sm text-red-600 dark:text-red-400">{checklistError}</p>
+            )}
+            {addItemFormOpen && (
+              <form onSubmit={handleAddChecklistItem} className="flex gap-2">
+                <input
+                  ref={newItemInputRef}
+                  autoFocus
+                  value={newItemText}
+                  onChange={(e) => setNewItemText(e.target.value)}
+                  onBlur={() => {
+                    // Igual Trello: clicar fora fecha o campo (sem
+                    // confirmar nada digitado e não enviado) — só não
+                    // fecha logo depois de mandar um item (o próprio
+                    // handleAddChecklistItem já devolve o foco pro campo,
+                    // o que dispararia esse blur/focus em sequência).
+                    if (!newItemText.trim()) setAddItemFormOpen(false);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setNewItemText("");
+                      setAddItemFormOpen(false);
+                    }
+                  }}
+                  placeholder="Adicionar item..."
+                  className="flex-1 rounded-card border border-surface-border bg-surface p-2 text-sm text-ink outline-none transition-colors focus:border-brand-500"
+                />
+                <button
+                  type="submit"
+                  disabled={!newItemText.trim() || addingItem}
+                  className="rounded-card bg-brand-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-brand-600 disabled:opacity-60"
+                >
+                  {addingItem ? "..." : "Adicionar"}
+                </button>
+              </form>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium text-ink-soft">Anexos</h3>
               <label
                 aria-label="Adicionar anexo"
@@ -463,7 +638,7 @@ export function CardDetailModal({
               {attachments.map((attachment) => (
                 <div
                   key={attachment.id}
-                  className="group relative inline-block overflow-hidden rounded-card border border-surface-border bg-surface-border/10"
+                  className="group/attachment relative inline-block overflow-hidden rounded-card border border-surface-border bg-surface-border/10"
                 >
                   <button
                     type="button"
@@ -481,7 +656,7 @@ export function CardDetailModal({
                     <button
                       onClick={() => handleDeleteAttachment(attachment.id)}
                       aria-label="Excluir anexo"
-                      className="absolute right-1 top-1 hidden rounded-full bg-black/60 p-1 text-white transition-colors hover:bg-red-600 group-hover:block"
+                      className="absolute right-1 top-1 hidden rounded-full bg-black/60 p-1 text-white transition-colors hover:bg-red-600 group-hover/attachment:block"
                     >
                       <XIcon className="h-3 w-3" />
                     </button>
@@ -508,7 +683,7 @@ export function CardDetailModal({
               <p className="text-sm text-ink-soft">Nenhum comentário ainda.</p>
             )}
             {comments.map((comment) => (
-              <div key={comment.id} className="group flex items-start gap-2">
+              <div key={comment.id} className="group/comment flex items-start gap-2">
                 <Avatar
                   name={comment.author?.name ?? "?"}
                   avatarUrl={comment.author?.avatarUrl}
@@ -531,7 +706,7 @@ export function CardDetailModal({
                   <button
                     onClick={() => handleDeleteComment(comment.id)}
                     aria-label="Excluir comentário"
-                    className="hidden shrink-0 rounded-full p-1 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover:block"
+                    className="hidden shrink-0 rounded-full p-1 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover/comment:block"
                   >
                     <TrashIcon className="h-3.5 w-3.5" />
                   </button>
