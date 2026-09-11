@@ -156,6 +156,8 @@ export interface CardItem {
   position: number;
   listId: string;
   createdAt: string;
+  dueDate: string | null;
+  completed: boolean;
   labelIds: string[];
   checklistItems: ChecklistItem[];
 }
@@ -242,7 +244,10 @@ export const moveCard = (cardId: string, listId: string, position: number) =>
     body: JSON.stringify({ listId, position }),
   });
 
-export const updateCard = (cardId: string, data: { title?: string; description?: string | null }) =>
+export const updateCard = (
+  cardId: string,
+  data: { title?: string; description?: string | null; dueDate?: string | null; completed?: boolean }
+) =>
   apiFetch<{ card: CardItem }>(`/cards/${cardId}`, {
     method: "PATCH",
     body: JSON.stringify(data),

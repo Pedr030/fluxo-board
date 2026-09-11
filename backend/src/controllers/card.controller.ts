@@ -59,21 +59,37 @@ const updateCardSchema = z.object({
   description: z.string().nullable().optional(),
   listId: z.string().min(1).optional(),
   position: z.number().int().min(0).optional(),
+  dueDate: z
+    .string()
+    .nullable()
+    .optional()
+    .refine((v) => v === undefined || v === null || !Number.isNaN(new Date(v).getTime()), {
+      message: "Data inválida",
+    }),
+  completed: z.boolean().optional(),
 });
 
 /**
- * PATCH /cards/:id  { title?, description?, listId?, position? }
+ * PATCH /cards/:id  { title?, description?, listId?, position?, dueDate?, completed? }
  * Dois modos, mutuamente exclusivos por enquanto:
  *  - listId + position juntos: move o card (reindexa a(s) lista(s) — ver
  *    seção 3 do spec, posições inteiras 0..n-1 sem gaps).
- *  - title e/ou description: edita o conteúdo, sem mexer em posição.
+ *  - title, description, dueDate e/ou completed: edita o conteúdo, sem
+ *    mexer em posição.
  */
 export async function updateCard(req: AuthRequest, res: Response) {
   const parsed = updateCardSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const { title, description, listId: toListId, position: toPosition } = parsed.data;
+  const {
+    title,
+    description,
+    listId: toListId,
+    position: toPosition,
+    dueDate,
+    completed,
+  } = parsed.data;
   const cardId = req.params.id;
 
   const card = await prisma.card.findUnique({ where: { id: cardId } });
@@ -154,7 +170,12 @@ export async function updateCard(req: AuthRequest, res: Response) {
     return res.json({ card: cardWithLabels });
   }
 
-  if (title === undefined && description === undefined) {
+  if (
+    title === undefined &&
+    description === undefined &&
+    dueDate === undefined &&
+    completed === undefined
+  ) {
     return res.status(400).json({ error: "Nada para atualizar" });
   }
 
@@ -163,6 +184,8 @@ export async function updateCard(req: AuthRequest, res: Response) {
     data: {
       ...(title !== undefined ? { title } : {}),
       ...(description !== undefined ? { description } : {}),
+      ...(dueDate !== undefined ? { dueDate: dueDate === null ? null : new Date(dueDate) } : {}),
+      ...(completed !== undefined ? { completed } : {}),
     },
     include: {
       cardLabels: { select: { labelId: true } },

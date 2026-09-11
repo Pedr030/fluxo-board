@@ -70,13 +70,15 @@ model List {
 }
 
 model Card {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   title       String
   description String?
   position    Int
   listId      String
   creatorId   String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
+  dueDate     DateTime?
+  completed   Boolean   @default(false)
 
   list List @relation(fields: [listId], references: [id], onDelete: Cascade)
   // SetNull, não Cascade: excluir a conta de quem criou um card não deveria
