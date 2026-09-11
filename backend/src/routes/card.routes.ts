@@ -1,7 +1,12 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.middleware";
+import { createImageUploadMiddleware } from "../middleware/imageUpload";
+import { sensitiveActionLimiter } from "../middleware/rateLimit";
+import { createAttachment, listAttachments } from "../controllers/attachment.controller";
 import { deleteCard, updateCard } from "../controllers/card.controller";
 import { createComment, listComments } from "../controllers/comment.controller";
+
+const uploadAttachmentFile = createImageUploadMiddleware("file", 5 * 1024 * 1024);
 
 export const cardRouter = Router();
 
@@ -11,3 +16,5 @@ cardRouter.patch("/:id", updateCard);
 cardRouter.delete("/:id", deleteCard);
 cardRouter.get("/:id/comments", listComments);
 cardRouter.post("/:id/comments", createComment);
+cardRouter.get("/:id/attachments", listAttachments);
+cardRouter.post("/:id/attachments", sensitiveActionLimiter, uploadAttachmentFile, createAttachment);

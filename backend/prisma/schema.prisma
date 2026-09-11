@@ -19,10 +19,11 @@ model User {
   avatarUrl String?
   createdAt DateTime @default(now())
 
-  memberships     BoardMember[]
-  ownedBoards     Board[]       @relation("BoardOwner")
-  cardsCreated    Card[]        @relation("CardCreator")
-  commentsWritten Comment[]     @relation("CommentAuthor")
+  memberships         BoardMember[]
+  ownedBoards         Board[]       @relation("BoardOwner")
+  cardsCreated        Card[]        @relation("CardCreator")
+  commentsWritten     Comment[]     @relation("CommentAuthor")
+  attachmentsUploaded Attachment[]  @relation("AttachmentUploader")
 }
 
 model Board {
@@ -80,8 +81,9 @@ model Card {
   // SetNull, não Cascade: excluir a conta de quem criou um card não deveria
   // apagar o card em si (que pode estar num board de outra pessoa) — só
   // perde a atribuição de quem criou.
-  creator  User?     @relation("CardCreator", fields: [creatorId], references: [id], onDelete: SetNull)
-  comments Comment[]
+  creator     User?        @relation("CardCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  comments    Comment[]
+  attachments Attachment[]
 }
 
 model Comment {
@@ -96,4 +98,22 @@ model Comment {
   // quem comentou, que só perde a atribuição (mesmo padrão do Card.creator).
   card   Card  @relation(fields: [cardId], references: [id], onDelete: Cascade)
   author User? @relation("CommentAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+}
+
+model Attachment {
+  id         String   @id @default(cuid())
+  cardId     String
+  uploaderId String?
+  filename   String
+  mimeType   String
+  size       Int
+  url        String
+  createdAt  DateTime @default(now())
+
+  // Mesma lógica do Comment: apagar o card leva os anexos junto (Cascade),
+  // apagar a conta de quem subiu só perde a atribuição (SetNull) — o
+  // arquivo em si no Supabase Storage é removido explicitamente no
+  // controller antes de excluir a linha, não por trigger do banco.
+  card     Card  @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  uploader User? @relation("AttachmentUploader", fields: [uploaderId], references: [id], onDelete: SetNull)
 }

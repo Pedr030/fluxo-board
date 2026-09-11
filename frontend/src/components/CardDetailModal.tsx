@@ -1,18 +1,22 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import {
+  Attachment,
   Comment,
+  createAttachment as apiCreateAttachment,
   createComment as apiCreateComment,
+  deleteAttachment as apiDeleteAttachment,
   deleteComment as apiDeleteComment,
   getMe,
+  listAttachments,
   listComments,
   updateCard as apiUpdateCard,
 } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 import { Avatar } from "./Avatar";
 import { CardData } from "./Card";
-import { TrashIcon, XIcon } from "./icons";
+import { CameraIcon, TrashIcon, XIcon } from "./icons";
 
 /**
  * Painel de detalhes do card (estilo Trello: clicar no card abre isso em
@@ -31,8 +35,7 @@ import { TrashIcon, XIcon } from "./icons";
  * é o evento (chega pra todo mundo na room, inclusive quem editou).
  *
  * Layout em duas colunas: conteúdo principal à esquerda (título,
- * descrição, anexos — placeholder ainda), coluna de comentários à
- * direita.
+ * descrição, anexos), coluna de comentários à direita.
  */
 export function CardDetailModal({
   card,
@@ -57,6 +60,11 @@ export function CardDetailModal({
   const [newCommentText, setNewCommentText] = useState("");
   const [postingComment, setPostingComment] = useState(false);
   const [commentError, setCommentError] = useState<string | null>(null);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachmentsLoading, setAttachmentsLoading] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -74,27 +82,40 @@ export function CardDetailModal({
   useEffect(() => {
     if (!open) return;
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      // Escape fecha primeiro o lightbox (se tiver uma imagem expandida
+      // aberta), só fecha o modal inteiro quando não tem nenhum lightbox.
+      if (lightboxUrl) {
+        setLightboxUrl(null);
+      } else {
+        onClose();
+      }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose]);
+  }, [open, onClose, lightboxUrl]);
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setCommentsLoading(true);
-    Promise.all([listComments(card.id), getMe()])
-      .then(([commentsRes, meRes]) => {
+    setAttachmentsLoading(true);
+    Promise.all([listComments(card.id), listAttachments(card.id), getMe()])
+      .then(([commentsRes, attachmentsRes, meRes]) => {
         if (cancelled) return;
         setComments(commentsRes.comments);
+        setAttachments(attachmentsRes.attachments);
         setCurrentUserId(meRes.user.id);
       })
       .catch(() => {
-        if (!cancelled) setCommentError("Não foi possível carregar os comentários.");
+        if (cancelled) return;
+        setCommentError("Não foi possível carregar os comentários.");
+        setAttachmentError("Não foi possível carregar os anexos.");
       })
       .finally(() => {
-        if (!cancelled) setCommentsLoading(false);
+        if (cancelled) return;
+        setCommentsLoading(false);
+        setAttachmentsLoading(false);
       });
     return () => {
       cancelled = true;
@@ -112,11 +133,23 @@ export function CardDetailModal({
       if (cardId !== card.id) return;
       setComments((prev) => prev.filter((c) => c.id !== commentId));
     }
+    function handleAttachmentCreated({ attachment, cardId }: { attachment: Attachment; cardId: string }) {
+      if (cardId !== card.id) return;
+      setAttachments((prev) => [...prev, attachment]);
+    }
+    function handleAttachmentDeleted({ attachmentId, cardId }: { attachmentId: string; cardId: string }) {
+      if (cardId !== card.id) return;
+      setAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
+    }
     socket.on("comment:created", handleCommentCreated);
     socket.on("comment:deleted", handleCommentDeleted);
+    socket.on("attachment:created", handleAttachmentCreated);
+    socket.on("attachment:deleted", handleAttachmentDeleted);
     return () => {
       socket.off("comment:created", handleCommentCreated);
       socket.off("comment:deleted", handleCommentDeleted);
+      socket.off("attachment:created", handleAttachmentCreated);
+      socket.off("attachment:deleted", handleAttachmentDeleted);
     };
   }, [open, card.id]);
 
@@ -173,6 +206,30 @@ export function CardDetailModal({
       await apiDeleteComment(commentId);
     } catch {
       setCommentError("Não foi possível excluir o comentário.");
+    }
+  }
+
+  async function handleUploadAttachment(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permite escolher o mesmo arquivo de novo depois
+    if (!file) return;
+    setUploadingAttachment(true);
+    setAttachmentError(null);
+    try {
+      await apiCreateAttachment(card.id, file);
+    } catch {
+      setAttachmentError("Não foi possível enviar o anexo.");
+    } finally {
+      setUploadingAttachment(false);
+    }
+  }
+
+  async function handleDeleteAttachment(attachmentId: string) {
+    setAttachmentError(null);
+    try {
+      await apiDeleteAttachment(attachmentId);
+    } catch {
+      setAttachmentError("Não foi possível excluir o anexo.");
     }
   }
 
@@ -264,8 +321,60 @@ export function CardDetailModal({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <h3 className="text-sm font-medium text-ink-soft">Anexos</h3>
-            <p className="text-sm text-ink-soft">Em breve.</p>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-ink-soft">Anexos</h3>
+              <label
+                aria-label="Adicionar anexo"
+                className="cursor-pointer rounded-full p-1.5 text-ink-soft transition-colors hover:bg-surface-border/50 hover:text-ink"
+              >
+                <CameraIcon className="h-4 w-4" />
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={handleUploadAttachment}
+                />
+              </label>
+            </div>
+            {attachmentError && <p className="text-sm text-red-600 dark:text-red-400">{attachmentError}</p>}
+            {!attachmentsLoading && attachments.length === 0 && !uploadingAttachment && (
+              <p className="text-sm text-ink-soft">Nenhum anexo ainda.</p>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {attachments.map((attachment) => (
+                <div
+                  key={attachment.id}
+                  className="group relative inline-block overflow-hidden rounded-card border border-surface-border bg-surface-border/10"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setLightboxUrl(attachment.url)}
+                    aria-label={`Expandir anexo ${attachment.filename}`}
+                    className="block"
+                  >
+                    <img
+                      src={attachment.url}
+                      alt={attachment.filename}
+                      className="h-36 w-auto max-w-56 object-contain"
+                    />
+                  </button>
+                  {attachment.uploader?.id === currentUserId && (
+                    <button
+                      onClick={() => handleDeleteAttachment(attachment.id)}
+                      aria-label="Excluir anexo"
+                      className="absolute right-1 top-1 hidden rounded-full bg-black/60 p-1 text-white transition-colors hover:bg-red-600 group-hover:block"
+                    >
+                      <XIcon className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {uploadingAttachment && (
+                <div className="flex h-36 w-36 items-center justify-center rounded-card border border-dashed border-surface-border text-xs text-ink-soft">
+                  Enviando...
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -331,6 +440,30 @@ export function CardDetailModal({
           {commentError && <p className="text-sm text-red-600 dark:text-red-400">{commentError}</p>}
         </div>
       </div>
+
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-6"
+          onClick={(e) => {
+            e.stopPropagation();
+            setLightboxUrl(null);
+          }}
+        >
+          <img
+            src={lightboxUrl}
+            alt=""
+            className="max-h-full max-w-full rounded-card object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <button
+            onClick={() => setLightboxUrl(null)}
+            aria-label="Fechar imagem"
+            className="absolute right-6 top-6 rounded-full bg-black/60 p-2 text-white transition-colors hover:bg-black/80"
+          >
+            <XIcon className="h-6 w-6" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

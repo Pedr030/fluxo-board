@@ -309,3 +309,38 @@ export const createComment = (cardId: string, text: string) =>
 
 export const deleteComment = (commentId: string) =>
   apiFetch<void>(`/comments/${commentId}`, { method: "DELETE" });
+
+export interface Attachment {
+  id: string;
+  cardId: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+  url: string;
+  createdAt: string;
+  uploader: { id: string; name: string; avatarUrl: string | null } | null;
+}
+
+export const listAttachments = (cardId: string) =>
+  apiFetch<{ attachments: Attachment[] }>(`/cards/${cardId}/attachments`);
+
+// Não usa apiFetch: precisa mandar multipart/form-data, igual updateAvatar.
+export async function createAttachment(cardId: string, file: File): Promise<{ attachment: Attachment }> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const token = getToken();
+  const res = await fetch(`${API_URL}/cards/${cardId}/attachments`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: formData,
+  });
+
+  if (!res.ok) {
+    throw new ApiError(res.status, await res.text());
+  }
+  return res.json();
+}
+
+export const deleteAttachment = (attachmentId: string) =>
+  apiFetch<void>(`/attachments/${attachmentId}`, { method: "DELETE" });

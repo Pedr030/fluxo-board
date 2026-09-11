@@ -4,6 +4,7 @@ import express, { NextFunction, Request, Response } from "express";
 import helmet from "helmet";
 import http from "http";
 import { Server } from "socket.io";
+import { attachmentRouter } from "./routes/attachment.routes";
 import { authRouter } from "./routes/auth.routes";
 import { boardRouter } from "./routes/board.routes";
 import { cardRouter } from "./routes/card.routes";
@@ -43,6 +44,7 @@ export function createApp(frontendUrl: string) {
   app.use("/lists", listRouter);
   app.use("/cards", cardRouter);
   app.use("/comments", commentRouter);
+  app.use("/attachments", attachmentRouter);
 
   // Handler de erro global — precisa ser o último app.use. Com
   // "express-async-errors" importado lá em cima, um throw (ou rejection)

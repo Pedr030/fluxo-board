@@ -1,4 +1,5 @@
 const AVATAR_BUCKET = "avatars";
+const ATTACHMENT_BUCKET = "attachments";
 
 /**
  * Sobe o avatar pro bucket `avatars` do Supabase Storage via REST direto
@@ -54,4 +55,55 @@ export async function removeAvatar(userId: string): Promise<void> {
   if (body.includes("not_found") || body.includes("NoSuchKey")) return;
 
   throw new Error(`Falha ao remover avatar do Supabase Storage: ${res.status} ${body}`);
+}
+
+/**
+ * Caminho do objeto no bucket `attachments`, agrupado por card. Diferente
+ * do avatar (um só por usuário, upsert), cada anexo é um objeto novo — a
+ * chave é `${cardId}/${attachmentId}`, com o id gerado pelo controller
+ * (crypto.randomUUID(), não o cuid padrão do Prisma) antes do upload, pra
+ * dar pra montar essa mesma chave depois só com os dados da linha do
+ * banco (usado tanto no DELETE /attachments/:id quanto na limpeza em
+ * cascata quando o card inteiro é excluído).
+ */
+export function attachmentObjectKey(cardId: string, attachmentId: string): string {
+  return `${cardId}/${attachmentId}`;
+}
+
+export async function uploadAttachment(
+  objectKey: string,
+  buffer: Buffer,
+  mimeType: string
+): Promise<string> {
+  const supabaseUrl = process.env.SUPABASE_URL!;
+  const res = await fetch(`${supabaseUrl}/storage/v1/object/${ATTACHMENT_BUCKET}/${objectKey}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      "Content-Type": mimeType,
+    },
+    body: buffer,
+  });
+
+  if (!res.ok) {
+    throw new Error(`Falha ao enviar anexo pro Supabase Storage: ${res.status} ${await res.text()}`);
+  }
+
+  return `${supabaseUrl}/storage/v1/object/public/${ATTACHMENT_BUCKET}/${objectKey}`;
+}
+
+// Mesma lógica de "404 de verdade vem como 400" do removeAvatar acima.
+export async function removeAttachment(objectKey: string): Promise<void> {
+  const supabaseUrl = process.env.SUPABASE_URL!;
+  const res = await fetch(`${supabaseUrl}/storage/v1/object/${ATTACHMENT_BUCKET}/${objectKey}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}` },
+  });
+
+  if (res.ok) return;
+
+  const body = await res.text();
+  if (body.includes("not_found") || body.includes("NoSuchKey")) return;
+
+  throw new Error(`Falha ao remover anexo do Supabase Storage: ${res.status} ${body}`);
 }

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "../prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { isBoardMember } from "../lib/authorization";
+import { attachmentObjectKey, removeAttachment } from "../lib/supabaseStorage";
 
 const createCardSchema = z.object({
   title: z.string().min(1),
@@ -171,6 +172,12 @@ export async function deleteCard(req: AuthRequest, res: Response) {
     return res.status(403).json({ error: "Você não é membro deste board" });
   }
 
+  // Precisa buscar os anexos ANTES da transação: onDelete: Cascade no
+  // schema já apaga as linhas de Attachment junto com o card, mas o
+  // Postgres não sabe nada sobre o arquivo de verdade no Supabase
+  // Storage — essa limpeza é feita à parte, depois.
+  const attachments = await prisma.attachment.findMany({ where: { cardId } });
+
   await prisma.$transaction(async (tx) => {
     await tx.card.delete({ where: { id: cardId } });
     const siblings = await tx.card.findMany({
@@ -181,6 +188,13 @@ export async function deleteCard(req: AuthRequest, res: Response) {
       siblings.map((c, index) => tx.card.update({ where: { id: c.id }, data: { position: index } }))
     );
   });
+
+  // Best-effort: as linhas já se foram do banco de qualquer forma, uma
+  // falha aqui só deixaria um arquivo órfão no bucket, não motivo pra
+  // desfazer a exclusão do card (que já aconteceu).
+  await Promise.all(
+    attachments.map((a) => removeAttachment(attachmentObjectKey(a.cardId, a.id)).catch(() => {}))
+  );
 
   const io = req.app.get("io") as Server;
   io.to(list.boardId).emit("card:deleted", { cardId, listId: card.listId });

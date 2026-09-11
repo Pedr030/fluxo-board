@@ -68,6 +68,7 @@ Já implementado em `backend/prisma/schema.prisma`. Resumo:
 | `List` | title, position, boardId | tem vários `Card` |
 | `Card` | title, description, position, listId, creatorId | pertence a uma `List` |
 | `Comment` | text, cardId, authorId, createdAt | pertence a um `Card` |
+| `Attachment` | cardId, uploaderId, filename, mimeType, size, url, createdAt | pertence a um `Card` |
 
 **Sobre `position` (ordenação de listas e cards):** a forma mais simples é
 usar inteiros e reindexar (0, 1, 2, ...) sempre que a ordem mudar dentro de
@@ -97,6 +98,9 @@ Todas as rotas abaixo (exceto `/auth/*`) exigem header
 | GET | `/cards/:id/comments` | lista comentários do card, em ordem cronológica |
 | POST | `/cards/:id/comments` | cria comentário `{ text }` |
 | DELETE | `/comments/:id` | remove comentário (só quem escreveu) |
+| GET | `/cards/:id/attachments` | lista anexos do card, em ordem cronológica |
+| POST | `/cards/:id/attachments` | envia anexo (multipart, campo `file`; imagem, máx. 5MB) |
+| DELETE | `/attachments/:id` | remove anexo (só quem enviou) |
 
 ## 5. Eventos de socket
 
@@ -115,6 +119,8 @@ com `board:leave` ao desmontar a página.
 | `board:deleted` | `{ boardId }` | `DELETE /boards/:id` |
 | `comment:created` | `{ comment, cardId }` | `POST /cards/:id/comments` |
 | `comment:deleted` | `{ commentId, cardId }` | `DELETE /comments/:id` |
+| `attachment:created` | `{ attachment, cardId }` | `POST /cards/:id/attachments` |
+| `attachment:deleted` | `{ attachmentId, cardId }` | `DELETE /attachments/:id` |
 
 Stub em `backend/src/sockets/boardSocket.ts` — os handlers de `join`/`leave`
 já existem, os eventos de mutação você adiciona junto com cada rota REST
