@@ -13,9 +13,15 @@ jobs:
   backend:
     name: Backend (typecheck + testes)
     runs-on: ubuntu-latest
-    # As credenciais do serviço batem com o que backend/package.json já usa
-    # (DATABASE_URL do script "test", via cross-env) — não precisa de
-    # nenhum secret configurado no repo.
+    # As credenciais do Postgres batem com o que backend/package.json já usa
+    # (DATABASE_URL do script "test", via cross-env) — não precisa de secret
+    # pra isso. SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY (abaixo) são secrets
+    # de verdade: os testes de anexo fazem uma chamada real ao Storage
+    # (DELETE numa chave que nunca existiu, tratado como sucesso) — sem
+    # essas variáveis a chamada falha e o teste vira 500.
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
     services:
       postgres:
         image: postgres:16-alpine
