@@ -1,3 +1,5 @@
+import Image from "next/image";
+
 /**
  * Avatar de um usuário: foto de verdade quando existe, senão a inicial do
  * nome numa bolinha colorida (mesmo fallback que já era usado antes de
@@ -16,7 +18,14 @@ export function Avatar({
   colorClassName?: string;
 }) {
   if (avatarUrl) {
-    return <img src={avatarUrl} alt={name} className={`${className} rounded-full object-cover`} />;
+    // `fill` em vez de width/height fixos porque o tamanho vem de fora
+    // via `className` (h-7 a h-32 dependendo de onde o Avatar é usado) —
+    // precisa do wrapper com posição relativa pra isso funcionar.
+    return (
+      <div className={`relative overflow-hidden rounded-full ${className}`}>
+        <Image src={avatarUrl} alt={name} fill sizes="128px" className="object-cover" />
+      </div>
+    );
   }
   return (
     <div
