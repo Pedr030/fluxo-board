@@ -71,6 +71,7 @@ Já implementado em `backend/prisma/schema.prisma`. Resumo:
 | `Attachment` | cardId, uploaderId, filename, mimeType, size, url, createdAt | pertence a um `Card` |
 | `Label` | boardId, name, color | pertence a um `Board`, paleta compartilhada |
 | `CardLabel` | cardId, labelId | tabela de junção N:N Card↔Label |
+| `ChecklistItem` | cardId, text, done, position | pertence a um `Card` (um card, uma checklist só) |
 
 **Sobre `position` (ordenação de listas e cards):** a forma mais simples é
 usar inteiros e reindexar (0, 1, 2, ...) sempre que a ordem mudar dentro de
@@ -108,10 +109,13 @@ Todas as rotas abaixo (exceto `/auth/*`) exigem header
 | DELETE | `/labels/:id` | remove a etiqueta (e a associação em todo card) |
 | POST | `/cards/:id/labels` | aplica etiqueta no card `{ labelId }` (idempotente) |
 | DELETE | `/cards/:id/labels/:labelId` | remove etiqueta do card |
+| POST | `/cards/:id/checklist-items` | cria item da checklist `{ text }` |
+| PATCH | `/checklist-items/:id` | edita texto e/ou marca/desmarca `{ text?, done? }` |
+| DELETE | `/checklist-items/:id` | remove item (reindexa os restantes) |
 
 `GET /boards/:id` já devolve `labels` (paleta do board inteiro) e cada
-card vem com `labelIds` — pequeno o bastante pra não precisar de rota
-separada, ao contrário de comentários/anexos.
+card vem com `labelIds` e `checklistItems` — pequeno o bastante pra não
+precisar de rota separada, ao contrário de comentários/anexos.
 
 ## 5. Eventos de socket
 
@@ -137,6 +141,9 @@ com `board:leave` ao desmontar a página.
 | `label:deleted` | `{ labelId, boardId }` | `DELETE /labels/:id` |
 | `card:label-added` | `{ cardId, labelId }` | `POST /cards/:id/labels` |
 | `card:label-removed` | `{ cardId, labelId }` | `DELETE /cards/:id/labels/:labelId` |
+| `checklist-item:created` | `{ item, cardId }` | `POST /cards/:id/checklist-items` |
+| `checklist-item:updated` | `{ item, cardId }` | `PATCH /checklist-items/:id` |
+| `checklist-item:deleted` | `{ itemId, cardId }` | `DELETE /checklist-items/:id` |
 
 Stub em `backend/src/sockets/boardSocket.ts` — os handlers de `join`/`leave`
 já existem, os eventos de mutação você adiciona junto com cada rota REST
@@ -179,7 +186,7 @@ pra próxima, o que ajuda demais quando você tá pareando com o Claude Code
   socket com dois clientes provando a sincronização em tempo real)
 - ~~CI (GitHub Actions rodando lint + testes a cada push)~~ — feito
 - Histórico de atividade do board (quem fez o quê e quando)
-- Checklist dentro do card
+- ~~Checklist dentro do card~~ — feito
 - Data de vencimento (due date) no card
 
 ## 7. Autenticação — detalhes

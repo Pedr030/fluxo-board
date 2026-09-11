@@ -22,6 +22,7 @@ import {
 import { getSocket } from "@/lib/socket";
 import {
   ApiError,
+  ChecklistItem,
   Label,
   Member,
   createList as apiCreateList,
@@ -278,6 +279,43 @@ export function Board({ boardId }: { boardId: string }) {
       );
     }
 
+    function handleChecklistItemCreated({ item, cardId }: { item: ChecklistItem; cardId: string }) {
+      setLists((prev) =>
+        prev.map((list) => ({
+          ...list,
+          cards: list.cards.map((c) =>
+            c.id === cardId ? { ...c, checklistItems: [...c.checklistItems, item] } : c
+          ),
+        }))
+      );
+    }
+
+    function handleChecklistItemUpdated({ item, cardId }: { item: ChecklistItem; cardId: string }) {
+      setLists((prev) =>
+        prev.map((list) => ({
+          ...list,
+          cards: list.cards.map((c) =>
+            c.id === cardId
+              ? { ...c, checklistItems: c.checklistItems.map((i) => (i.id === item.id ? item : i)) }
+              : c
+          ),
+        }))
+      );
+    }
+
+    function handleChecklistItemDeleted({ itemId, cardId }: { itemId: string; cardId: string }) {
+      setLists((prev) =>
+        prev.map((list) => ({
+          ...list,
+          cards: list.cards.map((c) =>
+            c.id === cardId
+              ? { ...c, checklistItems: c.checklistItems.filter((i) => i.id !== itemId) }
+              : c
+          ),
+        }))
+      );
+    }
+
     socket.on("list:created", handleListCreated);
     socket.on("list:updated", handleListUpdated);
     socket.on("list:deleted", handleListDeleted);
@@ -293,6 +331,9 @@ export function Board({ boardId }: { boardId: string }) {
     socket.on("label:deleted", handleLabelDeleted);
     socket.on("card:label-added", handleCardLabelAdded);
     socket.on("card:label-removed", handleCardLabelRemoved);
+    socket.on("checklist-item:created", handleChecklistItemCreated);
+    socket.on("checklist-item:updated", handleChecklistItemUpdated);
+    socket.on("checklist-item:deleted", handleChecklistItemDeleted);
 
     return () => {
       socket.emit("board:leave", boardId);
@@ -311,6 +352,9 @@ export function Board({ boardId }: { boardId: string }) {
       socket.off("label:deleted", handleLabelDeleted);
       socket.off("card:label-added", handleCardLabelAdded);
       socket.off("card:label-removed", handleCardLabelRemoved);
+      socket.off("checklist-item:created", handleChecklistItemCreated);
+      socket.off("checklist-item:updated", handleChecklistItemUpdated);
+      socket.off("checklist-item:deleted", handleChecklistItemDeleted);
       setOnlineUsers([]);
     };
   }, [boardId]);

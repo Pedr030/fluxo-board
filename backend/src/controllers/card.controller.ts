@@ -1,3 +1,4 @@
+import { ChecklistItem } from "@prisma/client";
 import { Response } from "express";
 import { Server } from "socket.io";
 import { z } from "zod";
@@ -45,7 +46,7 @@ export async function createCard(req: AuthRequest, res: Response) {
     data: { title: parsed.data.title, listId, position, creatorId: req.userId },
   });
 
-  const cardWithLabels = { ...card, labelIds: [] as string[] };
+  const cardWithLabels = { ...card, labelIds: [] as string[], checklistItems: [] as ChecklistItem[] };
 
   const io = req.app.get("io") as Server;
   io.to(list.boardId).emit("card:created", { card: cardWithLabels });
@@ -141,7 +142,10 @@ export async function updateCard(req: AuthRequest, res: Response) {
 
       return tx.card.findUniqueOrThrow({
         where: { id: cardId },
-        include: { cardLabels: { select: { labelId: true } } },
+        include: {
+          cardLabels: { select: { labelId: true } },
+          checklistItems: { orderBy: { position: "asc" } },
+        },
       });
     });
     const cardWithLabels = withLabelIds(updated);
@@ -160,7 +164,10 @@ export async function updateCard(req: AuthRequest, res: Response) {
       ...(title !== undefined ? { title } : {}),
       ...(description !== undefined ? { description } : {}),
     },
-    include: { cardLabels: { select: { labelId: true } } },
+    include: {
+      cardLabels: { select: { labelId: true } },
+      checklistItems: { orderBy: { position: "asc" } },
+    },
   });
   const cardWithLabels = withLabelIds(updated);
 

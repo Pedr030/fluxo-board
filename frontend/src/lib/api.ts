@@ -141,6 +141,14 @@ export interface Board {
   myRole: "OWNER" | "MEMBER";
 }
 
+export interface ChecklistItem {
+  id: string;
+  cardId: string;
+  text: string;
+  done: boolean;
+  position: number;
+}
+
 export interface CardItem {
   id: string;
   title: string;
@@ -149,6 +157,7 @@ export interface CardItem {
   listId: string;
   createdAt: string;
   labelIds: string[];
+  checklistItems: ChecklistItem[];
 }
 
 export interface ListItem {
@@ -377,3 +386,18 @@ export const attachLabel = (cardId: string, labelId: string) =>
 
 export const detachLabel = (cardId: string, labelId: string) =>
   apiFetch<void>(`/cards/${cardId}/labels/${labelId}`, { method: "DELETE" });
+
+export const createChecklistItem = (cardId: string, text: string) =>
+  apiFetch<{ item: ChecklistItem }>(`/cards/${cardId}/checklist-items`, {
+    method: "POST",
+    body: JSON.stringify({ text }),
+  });
+
+export const updateChecklistItem = (itemId: string, data: { text?: string; done?: boolean }) =>
+  apiFetch<{ item: ChecklistItem }>(`/checklist-items/${itemId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+
+export const deleteChecklistItem = (itemId: string) =>
+  apiFetch<void>(`/checklist-items/${itemId}`, { method: "DELETE" });

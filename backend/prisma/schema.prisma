@@ -82,10 +82,11 @@ model Card {
   // SetNull, não Cascade: excluir a conta de quem criou um card não deveria
   // apagar o card em si (que pode estar num board de outra pessoa) — só
   // perde a atribuição de quem criou.
-  creator     User?        @relation("CardCreator", fields: [creatorId], references: [id], onDelete: SetNull)
-  comments    Comment[]
-  attachments Attachment[]
-  cardLabels  CardLabel[]
+  creator        User?           @relation("CardCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  comments       Comment[]
+  attachments    Attachment[]
+  cardLabels     CardLabel[]
+  checklistItems ChecklistItem[]
 }
 
 model Comment {
@@ -146,4 +147,19 @@ model CardLabel {
   label Label @relation(fields: [labelId], references: [id], onDelete: Cascade)
 
   @@id([cardId, labelId])
+}
+
+// Um item de checklist do card (subtarefa com checkbox). Sem "autor" —
+// igual etiqueta, é conteúdo colaborativo do card, qualquer membro do
+// board mexe. Sem uma entidade "Checklist" separada de propósito: um
+// card só tem uma lista de itens, não várias como o Trello de verdade
+// permite — mais simples, e cobre o que foi pedido.
+model ChecklistItem {
+  id       String  @id @default(cuid())
+  cardId   String
+  text     String
+  done     Boolean @default(false)
+  position Int
+
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
 }
