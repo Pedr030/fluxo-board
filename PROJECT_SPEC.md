@@ -30,23 +30,25 @@ naturalmente no seu dia a dia, em vez de só em teoria.
 ┌─────────────┐        HTTP (REST, JSON)        ┌──────────────┐
 │   Frontend   │ ───────────────────────────────▶ │   Backend    │
 │  Next.js     │ ◀─────────────────────────────── │  Express     │
-│  (Vercel)    │                                   │  (Railway)   │
+│  (Vercel)    │                                   │  (Northflank)│
 │              │        WebSocket (Socket.io)       │              │
 │              │ ◀────────────────────────────────▶│              │
 └─────────────┘                                    └──────┬───────┘
                                                             │ Prisma
                                                      ┌──────▼───────┐
                                                      │  PostgreSQL   │
-                                                     │ (Supabase/    │
-                                                     │  Neon/Railway)│
+                                                     │  + Storage    │
+                                                     │  (Supabase)   │
                                                      └───────────────┘
 ```
 
 Por que backend e banco separados do frontend: WebSocket precisa de uma
 conexão persistente, que funções serverless (como as do Vercel) não
 sustentam bem. Por isso o backend roda como processo Node "de verdade" no
-Railway/Render, enquanto o Next.js fica no Vercel só cuidando de UI e
-rotas. Essa separação é, inclusive, um bom ponto pra explicar em entrevista.
+Northflank (container a partir de `backend/Dockerfile`), enquanto o
+Next.js fica no Vercel só cuidando de UI e rotas. Essa separação é,
+inclusive, um bom ponto pra explicar em entrevista. Detalhes de por que
+essas escolhas específicas de provedor (todas em free tier): seção 8.
 
 **Regra de ouro do tempo real:** toda mutação (criar card, mover card, etc.)
 segue sempre o mesmo caminho: (1) o cliente chama uma rota REST, (2) a rota
@@ -64,7 +66,7 @@ Já implementado em `backend/prisma/schema.prisma`. Resumo:
 |---|---|---|
 | `User` | name, email, password (hash) | dono/membro de boards |
 | `Board` | title, ownerId | tem várias `List` |
-| `BoardMember` | boardId, userId, role (OWNER/MEMBER) | liga User↔Board (N:N com atributo) |
+| `BoardMember` | boardId, userId, role (OWNER/ADMIN/MEMBER), restricted | liga User↔Board (N:N com atributo). `restricted` é uma dimensão separada do cargo: um MEMBER restrito só edita/move/exclui cards atribuídos a ele mesmo (ou sem responsável) — promover a ADMIN sempre limpa a flag |
 | `List` | title, position, boardId | tem vários `Card` |
 | `Card` | title, description, position, listId, creatorId, assigneeId, dueDate, completed | pertence a uma `List` |
 | `Comment` | text, cardId, authorId, createdAt | pertence a um `Card` |
@@ -89,16 +91,25 @@ Todas as rotas abaixo (exceto `/auth/*`) exigem header
 |---|---|---|
 | POST | `/auth/register` | cria usuário, devolve `{ user, token }` |
 | POST | `/auth/login` | autentica, devolve `{ user, token }` |
+| GET | `/me` | dados do usuário logado |
+| PATCH | `/me` | edita nome/e-mail |
+| PATCH | `/me/password` | troca de senha (exige a senha atual) |
+| PATCH | `/me/avatar` | envia avatar (multipart, campo `file`; imagem, máx. 2MB) |
+| DELETE | `/me/avatar` | remove avatar |
+| DELETE | `/me` | exclui a conta — boards que a pessoa é dona precisam ser transferidos ou excluídos antes (nunca fica board órfão) |
 | GET | `/boards` | lista boards do usuário logado |
 | POST | `/boards` | cria board `{ title }` (já nasce com 3 etiquetas: Alta/Média/Baixa) |
-| GET | `/boards/:id` | detalhe do board com lists+cards |
-| POST | `/boards/:id/invite` | adiciona membro `{ email }` |
+| GET | `/boards/:id` | detalhe do board com lists+cards; inclui `myRole` e `myRestricted` |
+| DELETE | `/boards/:id` | remove board (só o dono) |
+| GET | `/boards/:id/members` | lista membros do board (dono e admins primeiro) |
+| POST | `/boards/:id/invite` | adiciona membro `{ email }` (dono ou admin) |
+| PATCH | `/boards/:id/members/:memberId` | promove/rebaixa ADMIN↔MEMBER e/ou ajusta `restricted` `{ role?, restricted? }` — só o dono, nunca no próprio dono; promover a ADMIN força `restricted: false` |
 | POST | `/boards/:id/lists` | cria lista `{ title }` |
 | PATCH | `/lists/:id` | renomeia (`{ title }`) ou reordena (`{ position }`) lista |
-| POST | `/lists/:id/cards` | cria card `{ title }` |
-| PATCH | `/cards/:id` | edita/move card `{ title?, description?, listId?, position?, dueDate?, completed?, assigneeId? }` — `assigneeId` precisa ser membro do board (400 senão) |
-| DELETE | `/cards/:id` | remove card |
-| DELETE | `/boards/:id` | remove board (só o dono) |
+| DELETE | `/lists/:id` | remove lista (e os cards dela, em cascata) |
+| POST | `/lists/:id/cards` | cria card `{ title }` — aberto a qualquer membro, mesmo restrito |
+| PATCH | `/cards/:id` | edita/move card `{ title?, description?, listId?, position?, dueDate?, completed?, assigneeId? }` — `assigneeId` precisa ser membro do board (400 senão); 403 se quem chama é um membro restrito mexendo num card atribuído a outra pessoa |
+| DELETE | `/cards/:id` | remove card — mesma regra de 403 acima pra membro restrito |
 | GET | `/cards/:id/comments` | lista comentários do card, em ordem cronológica |
 | POST | `/cards/:id/comments` | cria comentário `{ text }` |
 | DELETE | `/comments/:id` | remove comentário (só quem escreveu) |
@@ -113,7 +124,7 @@ Todas as rotas abaixo (exceto `/auth/*`) exigem header
 | POST | `/cards/:id/checklist-items` | cria item da checklist `{ text }` |
 | PATCH | `/checklist-items/:id` | edita texto e/ou marca/desmarca `{ text?, done? }` |
 | DELETE | `/checklist-items/:id` | remove item (reindexa os restantes) |
-| GET | `/boards/:id/activity` | histórico de atividade do board, mais recente primeiro (últimas 100) |
+| GET | `/boards/:id/activity?page=<n>` | histórico de atividade do board, paginado (50 por página, mais recente primeiro); resposta traz `totalPages`/`totalCount` |
 
 `GET /boards/:id` já devolve `labels` (paleta do board inteiro) e cada
 card vem com `labelIds` e `checklistItems` — pequeno o bastante pra não
@@ -129,6 +140,7 @@ com `board:leave` ao desmontar a página.
 | `list:created` | `{ list }` | `POST /boards/:id/lists` |
 | `list:updated` | `{ list }` | `PATCH /lists/:id` (título) |
 | `list:moved` | `{ orderedListIds }` | `PATCH /lists/:id` (position) |
+| `list:deleted` | `{ listId }` | `DELETE /lists/:id` |
 | `card:created` | `{ card }` | `POST /lists/:id/cards` |
 | `card:moved` | `{ card, fromListId, toListId }` | `PATCH /cards/:id` (quando `listId`/`position` muda) |
 | `card:updated` | `{ card }` | `PATCH /cards/:id` (título/descrição/prazo/conclusão/responsável) |
@@ -147,6 +159,15 @@ com `board:leave` ao desmontar a página.
 | `checklist-item:updated` | `{ item, cardId }` | `PATCH /checklist-items/:id` |
 | `checklist-item:deleted` | `{ itemId, cardId }` | `DELETE /checklist-items/:id` |
 | `activity:created` | `{ activity }` | qualquer ação de alto sinal (ver seção 3, model `Activity`) |
+| `member:updated` | `{ member }` | `PATCH /boards/:id/members/:memberId` (mudança de cargo e/ou `restricted`) |
+| `presence:update` | `{ users }` | alguém entra/sai da room (`board:join`/`board:leave`/desconexão), ou o cliente reemite `profile:updated` abaixo |
+
+Além dos eventos servidor→clientes acima, existe um evento **cliente→
+servidor**: `profile:updated` (sem payload), disparado pelo frontend depois
+de `PATCH /me`, `/me/password` ou `/me/avatar` ter sucesso — sem isso, a
+presença ao vivo mostraria o nome/avatar antigo em qualquer board já aberto
+até reconectar. O servidor busca os dados atuais do usuário e reemite
+`presence:update` em toda room em que aquele socket estiver.
 
 Stub em `backend/src/sockets/boardSocket.ts` — os handlers de `join`/`leave`
 já existem, os eventos de mutação você adiciona junto com cada rota REST
@@ -191,6 +212,16 @@ pra próxima, o que ajuda demais quando você tá pareando com o Claude Code
 - ~~Histórico de atividade do board (quem fez o quê e quando)~~ — feito
 - ~~Checklist dentro do card~~ — feito
 - ~~Data de vencimento (due date) no card~~ — feito
+- ~~Atribuição de responsável (assignee) por card~~ — feito
+- ~~Hierarquia de permissões: papel `ADMIN` (convida membros, sem
+  privilégio extra sobre cards) e flag `restricted` por membro (só edita/
+  move/exclui os próprios cards atribuídos)~~ — feito
+- ~~Deploy em produção~~ — feito (Vercel + Northflank + Supabase, seção 8)
+- ~~Branch protection na `main`~~ — feito (PR + CI obrigatórios antes de
+  mergear, nem o dono do repo pode dar push direto)
+- ~~Paginação do histórico de atividade~~ — feito (antes cortava
+  silenciosamente nas últimas 100 entradas; agora pagina de verdade,
+  com página numerada no frontend)
 
 ## 7. Autenticação — detalhes
 
@@ -202,13 +233,28 @@ entrevista, não como bloqueio pro MVP).
 
 ## 8. Deploy
 
-- **Frontend**: Vercel, conectado ao repo, variável `NEXT_PUBLIC_API_URL`
-  apontando pro backend em produção.
-- **Backend**: Railway ou Render (free tier), variáveis `DATABASE_URL`,
-  `JWT_SECRET`, `FRONTEND_URL`.
-- **Banco**: Supabase ou Neon (Postgres free tier) — pegue a
-  `DATABASE_URL` de lá e rode `npx prisma migrate deploy` no backend em
-  produção.
+Tudo em produção, custo zero:
+
+- **Frontend**: Vercel, deploy automático a cada push em `main`, variável
+  `NEXT_PUBLIC_API_URL` apontando pro backend.
+- **Backend**: Northflank (plano "Developer Sandbox" — free, não hiberna,
+  container de verdade, necessário pro WebSocket sobreviver; Railway free
+  tier virou só crédito de trial e Render free hiberna após 15min de
+  inatividade, o que mataria a proposta de colaboração ao vivo), a partir
+  de `backend/Dockerfile`, deploy automático a cada push em `main`,
+  variáveis `DATABASE_URL`, `JWT_SECRET`, `FRONTEND_URL`,
+  `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`.
+- **Banco + Storage**: Supabase (Postgres via *session pooler* — não
+  *direct*, que é IPv6-only por padrão; não *transaction pooler*, que não
+  suporta prepared statements que o Prisma precisa) + Storage (avatares e
+  anexos). Free tier pausa o projeto depois de 1 semana sem uso — reativa
+  pelo dashboard, sem perder dado.
+
+**Fluxo de trabalho**: commits acumulam na branch `development` (testados
+localmente a cada passo); chegar à produção exige abrir uma PR
+`development` → `main` (`gh pr create`) e mergear (`gh pr merge`) só depois
+dos dois checks de CI passarem — branch protection na `main` bloqueia
+push direto, inclusive do dono do repo (`enforce_admins: true`).
 
 ## 9. Identidade visual — resumo rápido
 

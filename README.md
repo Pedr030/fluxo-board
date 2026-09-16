@@ -40,7 +40,12 @@ idempotente.
 ## Funcionalidades
 
 **Boards, listas e cards**
-- Boards com dono (`OWNER`) e membros convidados por e-mail (`MEMBER`)
+- Boards com dono (`OWNER`), admin (`ADMIN`, convida membros — sem
+  privilégio extra sobre cards) e membro (`MEMBER`) convidados por e-mail
+- Atribuição de responsável (assignee) por card, e um flag `restricted`
+  por membro (independente do cargo): quem está restrito só edita, move ou
+  exclui os cards atribuídos a si mesmo (ou sem responsável ainda) — o
+  dono ativa por pessoa na aba Membros
 - Listas e cards com CRUD completo, reordenáveis por drag-and-drop
   (`@dnd-kit`, com suporte a teclado) dentro da lista, entre listas, e entre
   listas do próprio board
@@ -63,11 +68,11 @@ idempotente.
   visualização em lightbox; só quem enviou exclui)
 
 **Board**
-- **Histórico de atividade** em tempo real: quem fez o quê e quando (criar/
-  mover/excluir card e lista, concluir/reabrir, comentar, convidar membro)
-  — guardado como um retrato congelado no momento da ação, não uma junção
-  viva, então continua fazendo sentido mesmo depois do card ou lista em
-  questão ser excluído
+- **Histórico de atividade** em tempo real, paginado: quem fez o quê e
+  quando (criar/mover/excluir card e lista, concluir/reabrir, comentar,
+  convidar membro, mudar cargo/restrição) — guardado como um retrato
+  congelado no momento da ação, não uma junção viva, então continua fazendo
+  sentido mesmo depois do card ou lista em questão ser excluído
 - Presença ao vivo: avatares de quem está com o board aberto agora
 - Modo claro/escuro persistido
 
@@ -81,7 +86,7 @@ idempotente.
 
 | | |
 |---|---|
-| **Frontend** | Next.js 14 (App Router) · React 18 · TypeScript · Tailwind CSS · `@dnd-kit` · `socket.io-client` |
+| **Frontend** | Next.js 15 (App Router) · React 18 · TypeScript · Tailwind CSS · `@dnd-kit` · `socket.io-client` |
 | **Backend** | Node.js · Express 4 · TypeScript · Socket.io 4 · Prisma 5 · Zod (validação) · JWT + bcrypt · Multer (upload) · Helmet + rate limiting |
 | **Banco** | PostgreSQL |
 | **Storage** | Supabase Storage (avatares e anexos de card) |
@@ -191,7 +196,9 @@ mutação feita por um chega em tempo real no outro.
 
 Fluxo de trabalho: commits acumulam na branch `development` (testados
 localmente a cada passo); o merge para `main` é o gatilho deliberado de
-deploy em produção.
+deploy em produção — e só acontece via PR com os dois checks de CI
+verdes (branch protection bloqueia push direto na `main`, inclusive do
+dono do repositório).
 
 ## Documentação completa
 
