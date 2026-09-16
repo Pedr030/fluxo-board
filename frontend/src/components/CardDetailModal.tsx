@@ -6,6 +6,7 @@ import {
   ChecklistItem,
   Comment,
   Label,
+  Member,
   attachLabel as apiAttachLabel,
   createAttachment as apiCreateAttachment,
   createChecklistItem as apiCreateChecklistItem,
@@ -49,6 +50,7 @@ import { CalendarIcon, CameraIcon, CheckIcon, PlusIcon, TrashIcon, XIcon } from 
 export function CardDetailModal({
   card,
   labels,
+  members,
   boardId,
   open,
   onClose,
@@ -56,6 +58,7 @@ export function CardDetailModal({
 }: {
   card: CardData;
   labels: Label[];
+  members: Member[];
   boardId: string;
   open: boolean;
   onClose: () => void;
@@ -88,6 +91,8 @@ export function CardDetailModal({
   const [checklistError, setChecklistError] = useState<string | null>(null);
   const [dueDateError, setDueDateError] = useState<string | null>(null);
   const [completedError, setCompletedError] = useState<string | null>(null);
+  const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
+  const [assigneeError, setAssigneeError] = useState<string | null>(null);
   const newItemInputRef = useRef<HTMLInputElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -113,13 +118,15 @@ export function CardDetailModal({
         setLightboxUrl(null);
       } else if (labelPickerOpen) {
         setLabelPickerOpen(false);
+      } else if (assigneePickerOpen) {
+        setAssigneePickerOpen(false);
       } else {
         onClose();
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose, lightboxUrl, labelPickerOpen]);
+  }, [open, onClose, lightboxUrl, labelPickerOpen, assigneePickerOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -290,6 +297,17 @@ export function CardDetailModal({
     }
   }
 
+  async function handleChangeAssignee(userId: string | null) {
+    setAssigneePickerOpen(false);
+    if (userId === (card.assignee?.id ?? null)) return;
+    setAssigneeError(null);
+    try {
+      await apiUpdateCard(card.id, { assigneeId: userId });
+    } catch {
+      setAssigneeError("Não foi possível atualizar o responsável.");
+    }
+  }
+
   async function handleDeleteLabel(labelId: string) {
     setLabelActionError(null);
     try {
@@ -431,6 +449,69 @@ export function CardDetailModal({
               </button>
             </div>
             {completedError && <p className="text-sm text-red-600 dark:text-red-400">{completedError}</p>}
+          </div>
+
+          <div className="relative flex flex-col gap-1.5">
+            <h3 className="text-sm font-medium text-ink-soft">Responsável</h3>
+            <button
+              type="button"
+              onClick={() => setAssigneePickerOpen((v) => !v)}
+              className="flex w-fit items-center gap-2 rounded-card border border-surface-border bg-surface px-2 py-1.5 text-sm text-ink transition-colors hover:border-brand-400"
+            >
+              {card.assignee ? (
+                <>
+                  <Avatar
+                    name={card.assignee.name}
+                    avatarUrl={card.assignee.avatarUrl}
+                    className="h-6 w-6 text-xs"
+                  />
+                  {card.assignee.name}
+                </>
+              ) : (
+                <span className="text-ink-soft">Ninguém atribuído</span>
+              )}
+            </button>
+            {assigneeError && <p className="text-sm text-red-600 dark:text-red-400">{assigneeError}</p>}
+
+            {assigneePickerOpen && (
+              <>
+                <div className="fixed inset-0 z-[65]" onClick={() => setAssigneePickerOpen(false)} />
+                <div
+                  className="absolute left-0 top-16 z-[66] w-64 rounded-card border border-surface-border bg-surface p-3 shadow-card"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <p className="mb-2 text-xs font-medium text-ink-soft">Membros do board</p>
+                  <div className="flex max-h-40 flex-col gap-1 overflow-y-auto">
+                    {members.map((m) => {
+                      const active = card.assignee?.id === m.user.id;
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => handleChangeAssignee(m.user.id)}
+                          className={`flex items-center gap-2 rounded-card px-2 py-1.5 text-left text-sm transition-colors ${
+                            active ? "bg-surface-border/50" : "hover:bg-surface-border/30"
+                          }`}
+                        >
+                          <Avatar name={m.user.name} avatarUrl={m.user.avatarUrl} className="h-6 w-6 text-xs" />
+                          <span className="flex-1 truncate text-ink">{m.user.name}</span>
+                          {active && <CheckIcon className="h-4 w-4 shrink-0 text-ink" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {card.assignee && (
+                    <button
+                      type="button"
+                      onClick={() => handleChangeAssignee(null)}
+                      className="mt-2 w-full rounded-card px-2 py-1.5 text-left text-sm text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-400"
+                    >
+                      Remover atribuição
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           <div className="relative flex flex-col gap-1.5">

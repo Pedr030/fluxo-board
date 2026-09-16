@@ -96,6 +96,7 @@ export async function getBoard(req: AuthRequest, res: Response) {
             include: {
               cardLabels: { select: { labelId: true } },
               checklistItems: { orderBy: { position: "asc" } },
+              assignee: { select: { id: true, name: true, avatarUrl: true } },
             },
           },
         },

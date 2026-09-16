@@ -3,7 +3,14 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChecklistItem, Label, deleteCard as apiDeleteCard, updateCard as apiUpdateCard } from "@/lib/api";
+import {
+  ChecklistItem,
+  Label,
+  Member,
+  deleteCard as apiDeleteCard,
+  updateCard as apiUpdateCard,
+} from "@/lib/api";
+import { Avatar } from "./Avatar";
 import { CardDetailModal } from "./CardDetailModal";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { CalendarIcon, CheckIcon, TrashIcon } from "./icons";
@@ -17,6 +24,7 @@ export interface CardData {
   completed: boolean;
   labelIds: string[];
   checklistItems: ChecklistItem[];
+  assignee: { id: string; name: string; avatarUrl: string | null } | null;
 }
 
 /**
@@ -92,7 +100,14 @@ export function CardBody({ card, labels }: { card: CardData; labels: Label[] }) 
           })}
         </div>
       )}
-      <p>{card.title}</p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="min-w-0 flex-1">{card.title}</p>
+        {card.assignee && (
+          <span title={`Responsável: ${card.assignee.name}`} className="shrink-0">
+            <Avatar name={card.assignee.name} avatarUrl={card.assignee.avatarUrl} className="h-6 w-6 text-xs" />
+          </span>
+        )}
+      </div>
       {card.description && (
         <p className="mt-2 line-clamp-2 break-words text-sm font-normal text-ink-soft">
           {card.description}
@@ -156,10 +171,12 @@ export function CardBody({ card, labels }: { card: CardData; labels: Label[] }) 
 export function Card({
   card,
   labels,
+  members,
   boardId,
 }: {
   card: CardData;
   labels: Label[];
+  members: Member[];
   boardId: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -254,6 +271,7 @@ export function Card({
       <CardDetailModal
         card={card}
         labels={labels}
+        members={members}
         boardId={boardId}
         open={detailOpen}
         onClose={() => setDetailOpen(false)}

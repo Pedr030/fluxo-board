@@ -6,6 +6,7 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-
 import { CSS } from "@dnd-kit/utilities";
 import {
   Label,
+  Member,
   createCard as apiCreateCard,
   deleteList as apiDeleteList,
   updateList as apiUpdateList,
@@ -37,10 +38,12 @@ export interface ListData {
 export function List({
   list,
   labels,
+  members,
   boardId,
 }: {
   list: ListData;
   labels: Label[];
+  members: Member[];
   boardId: string;
 }) {
   const {
@@ -208,7 +211,7 @@ export function List({
           <div ref={setDroppableRef} className="flex min-h-[40px] flex-col gap-3">
             <SortableContext items={list.cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
               {list.cards.map((card) => (
-                <Card key={card.id} card={card} labels={labels} boardId={boardId} />
+                <Card key={card.id} card={card} labels={labels} members={members} boardId={boardId} />
               ))}
             </SortableContext>
           </div>

@@ -154,6 +154,7 @@ function LabelColumn({
   color,
   cards,
   labels,
+  members,
   boardId,
   emptyMessage,
   storageKey,
@@ -162,6 +163,7 @@ function LabelColumn({
   color?: string;
   cards: CardData[];
   labels: Label[];
+  members: Member[];
   boardId: string;
   emptyMessage: string;
   storageKey: string;
@@ -215,7 +217,7 @@ function LabelColumn({
       {!collapsed && (
         <div className="flex flex-col gap-3">
           {cards.map((card) => (
-            <CardTile key={card.id} card={card} labels={labels} boardId={boardId} />
+            <CardTile key={card.id} card={card} labels={labels} members={members} boardId={boardId} />
           ))}
           {cards.length === 0 && <p className="text-sm text-ink-soft">{emptyMessage}</p>}
         </div>
@@ -946,7 +948,13 @@ export function Board({ boardId }: { boardId: string }) {
                         <span className="text-sm text-ink-soft">({cardsWithLabel.length})</span>
                       </div>
                       {cardsWithLabel.map((card) => (
-                        <CardTile key={card.id} card={card} labels={labels} boardId={boardId} />
+                        <CardTile
+                          key={card.id}
+                          card={card}
+                          labels={labels}
+                          members={members}
+                          boardId={boardId}
+                        />
                       ))}
                       {cardsWithLabel.length === 0 && (
                         <p className="text-sm text-ink-soft">Nenhum card com essa etiqueta.</p>
@@ -975,6 +983,7 @@ export function Board({ boardId }: { boardId: string }) {
                       color={label.color}
                       cards={cardsWithLabel}
                       labels={labels}
+                      members={members}
                       boardId={boardId}
                       emptyMessage="Nenhum card com essa etiqueta."
                       storageKey={`fluxo_label_column_collapsed_${boardId}_${label.id}`}
@@ -992,6 +1001,7 @@ export function Board({ boardId }: { boardId: string }) {
                       title="Sem etiqueta"
                       cards={unlabeled}
                       labels={labels}
+                      members={members}
                       boardId={boardId}
                       emptyMessage="Nenhum card sem etiqueta."
                       storageKey={`fluxo_label_column_collapsed_${boardId}_unlabeled`}
@@ -1016,7 +1026,7 @@ export function Board({ boardId }: { boardId: string }) {
               strategy={horizontalListSortingStrategy}
             >
               {lists.map((list) => (
-                <List key={list.id} list={list} labels={labels} boardId={boardId} />
+                <List key={list.id} list={list} labels={labels} members={members} boardId={boardId} />
               ))}
             </SortableContext>
 

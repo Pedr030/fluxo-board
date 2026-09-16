@@ -22,6 +22,7 @@ model User {
   memberships         BoardMember[]
   ownedBoards         Board[]       @relation("BoardOwner")
   cardsCreated        Card[]        @relation("CardCreator")
+  cardsAssigned       Card[]        @relation("CardAssignee")
   commentsWritten     Comment[]     @relation("CommentAuthor")
   attachmentsUploaded Attachment[]  @relation("AttachmentUploader")
   activities          Activity[]    @relation("ActivityActor")
@@ -78,6 +79,7 @@ model Card {
   position    Int
   listId      String
   creatorId   String?
+  assigneeId  String?
   createdAt   DateTime  @default(now())
   dueDate     DateTime?
   completed   Boolean   @default(false)
@@ -85,8 +87,11 @@ model Card {
   list List @relation(fields: [listId], references: [id], onDelete: Cascade)
   // SetNull, não Cascade: excluir a conta de quem criou um card não deveria
   // apagar o card em si (que pode estar num board de outra pessoa) — só
-  // perde a atribuição de quem criou.
+  // perde a atribuição de quem criou. Mesma lógica pro responsável
+  // (assignee): a pessoa saiu, o card continua existindo, só fica sem
+  // responsável designado.
   creator        User?           @relation("CardCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  assignee       User?           @relation("CardAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   comments       Comment[]
   attachments    Attachment[]
   cardLabels     CardLabel[]

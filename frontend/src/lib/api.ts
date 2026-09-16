@@ -160,6 +160,7 @@ export interface CardItem {
   completed: boolean;
   labelIds: string[];
   checklistItems: ChecklistItem[];
+  assignee: { id: string; name: string; avatarUrl: string | null } | null;
 }
 
 export interface ListItem {
@@ -254,7 +255,13 @@ export const moveCard = (cardId: string, listId: string, position: number) =>
 
 export const updateCard = (
   cardId: string,
-  data: { title?: string; description?: string | null; dueDate?: string | null; completed?: boolean }
+  data: {
+    title?: string;
+    description?: string | null;
+    dueDate?: string | null;
+    completed?: boolean;
+    assigneeId?: string | null;
+  }
 ) =>
   apiFetch<{ card: CardItem }>(`/cards/${cardId}`, {
     method: "PATCH",

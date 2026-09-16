@@ -1,7 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Label, deleteCard as apiDeleteCard, updateCard as apiUpdateCard } from "@/lib/api";
+import {
+  Label,
+  Member,
+  deleteCard as apiDeleteCard,
+  updateCard as apiUpdateCard,
+} from "@/lib/api";
 import { CardBody, CardData } from "./Card";
 import { CardDetailModal } from "./CardDetailModal";
 import { ConfirmDialog } from "./ConfirmDialog";
@@ -18,10 +23,12 @@ import { CheckIcon, TrashIcon } from "./icons";
 export function CardTile({
   card,
   labels,
+  members,
   boardId,
 }: {
   card: CardData;
   labels: Label[];
+  members: Member[];
   boardId: string;
 }) {
   const [detailOpen, setDetailOpen] = useState(false);
@@ -95,6 +102,7 @@ export function CardTile({
       <CardDetailModal
         card={card}
         labels={labels}
+        members={members}
         boardId={boardId}
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
