@@ -12,7 +12,7 @@ import {
 } from "@/lib/api";
 import { Card, CardData } from "./Card";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { TrashIcon } from "./icons";
+import { ArrowLeftIcon, TrashIcon } from "./icons";
 
 export interface ListData {
   id: string;
@@ -59,6 +59,33 @@ export function List({
   };
   const [title, setTitle] = useState("");
   const [creating, setCreating] = useState(false);
+  // Preferência de exibição de quem está vendo — não é estado do board
+  // (não vai pro backend nem pro socket, cada pessoa colapsa do seu
+  // jeito sem afetar quem mais está olhando o mesmo board). Guardada no
+  // localStorage (não em estado só de memória) pra sobreviver a reload
+  // e troca de aba Quadro/Por etiqueta, que desmontam o componente.
+  const collapsedStorageKey = `fluxo_list_collapsed_${list.id}`;
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return localStorage.getItem(collapsedStorageKey) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(collapsedStorageKey, next ? "1" : "0");
+      } catch {
+        // localStorage indisponível (modo privado, por exemplo) — só
+        // não persiste entre sessões, o toggle em si continua funcionando.
+      }
+      return next;
+    });
+  }
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(list.title);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -114,7 +141,9 @@ export function List({
     <div
       ref={setSortableRef}
       style={style}
-      className="flex w-80 shrink-0 flex-col gap-3 rounded-list border border-surface-border bg-surface/70 p-4"
+      className={`flex w-80 shrink-0 flex-col gap-3 rounded-list border border-surface-border bg-surface/70 p-4 ${
+        collapsed ? "self-start" : ""
+      }`}
     >
       <div
         {...attributes}
@@ -135,19 +164,34 @@ export function List({
         ) : (
           <h3
             onClick={() => setEditingTitle(true)}
-            className="font-display text-base font-semibold text-ink"
+            className="flex min-w-0 items-center gap-1.5 font-display text-base font-semibold text-ink"
           >
-            {list.title}
+            <span className="truncate">{list.title}</span>
+            {collapsed && (
+              <span className="shrink-0 text-xs font-normal text-ink-soft">({list.cards.length})</span>
+            )}
           </h3>
         )}
-        <button
-          onClick={() => setConfirmOpen(true)}
-          onPointerDown={(e) => e.stopPropagation()}
-          className="hidden shrink-0 rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover:block"
-          aria-label="Excluir lista"
-        >
-          <TrashIcon className="h-4 w-4" />
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            onClick={toggleCollapsed}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="rounded-full p-1.5 text-ink-soft transition-colors hover:bg-surface-border/50 hover:text-ink"
+            aria-label={collapsed ? "Expandir lista" : "Colapsar lista"}
+          >
+            <ArrowLeftIcon
+              className={`h-4 w-4 transition-transform ${collapsed ? "rotate-180" : "-rotate-90"}`}
+            />
+          </button>
+          <button
+            onClick={() => setConfirmOpen(true)}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="rounded-full p-1.5 text-ink-soft opacity-0 transition-opacity hover:bg-red-500/10 hover:text-red-600 group-hover:opacity-100"
+            aria-label="Excluir lista"
+          >
+            <TrashIcon className="h-4 w-4" />
+          </button>
+        </div>
       </div>
       {titleError && <p className="text-xs text-red-600 dark:text-red-400">{titleError}</p>}
       <ConfirmDialog
@@ -159,29 +203,33 @@ export function List({
         onConfirm={handleDeleteList}
         onCancel={() => setConfirmOpen(false)}
       />
-      <div ref={setDroppableRef} className="flex min-h-[40px] flex-col gap-3">
-        <SortableContext items={list.cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-          {list.cards.map((card) => (
-            <Card key={card.id} card={card} labels={labels} boardId={boardId} />
-          ))}
-        </SortableContext>
-      </div>
-      <form onSubmit={handleCreateCard} className="flex flex-col gap-1.5">
-        <input
-          className="rounded-card border border-surface-border bg-surface p-2.5 text-sm text-ink outline-none transition-colors focus:border-brand-500"
-          placeholder="Novo card"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
-        <button
-          type="submit"
-          disabled={creating}
-          className="rounded-card p-1.5 text-sm font-medium text-brand-500 transition-colors hover:bg-brand-50 disabled:opacity-60 dark:hover:bg-brand-500/10"
-        >
-          {creating ? "Criando..." : "+ Adicionar card"}
-        </button>
-        {createError && <p className="text-xs text-red-600 dark:text-red-400">{createError}</p>}
-      </form>
+      {!collapsed && (
+        <>
+          <div ref={setDroppableRef} className="flex min-h-[40px] flex-col gap-3">
+            <SortableContext items={list.cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+              {list.cards.map((card) => (
+                <Card key={card.id} card={card} labels={labels} boardId={boardId} />
+              ))}
+            </SortableContext>
+          </div>
+          <form onSubmit={handleCreateCard} className="flex flex-col gap-1.5">
+            <input
+              className="rounded-card border border-surface-border bg-surface p-2.5 text-sm text-ink outline-none transition-colors focus:border-brand-500"
+              placeholder="Novo card"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+            <button
+              type="submit"
+              disabled={creating}
+              className="rounded-card p-1.5 text-sm font-medium text-brand-500 transition-colors hover:bg-brand-50 disabled:opacity-60 dark:hover:bg-brand-500/10"
+            >
+              {creating ? "Criando..." : "+ Adicionar card"}
+            </button>
+            {createError && <p className="text-xs text-red-600 dark:text-red-400">{createError}</p>}
+          </form>
+        </>
+      )}
     </div>
   );
 }
