@@ -8,11 +8,6 @@ export interface AuthRequest extends Request {
 /**
  * Middleware de autenticação: espera um header
  * `Authorization: Bearer <token>` com um JWT válido.
- *
- * TODO: implementar a verificação de fato.
- * Dica: jwt.verify(token, process.env.JWT_SECRET!) retorna o payload
- * (você vai precisar ter colocado { userId } no payload ao assinar o
- * token em auth.controller.ts).
  */
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const header = req.headers.authorization;

@@ -7,10 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// TODO: este é o modelo mínimo para o MVP. Sinta-se livre de evoluir
-// (labels, comentários, anexos, activity log) conforme o roadmap do
-// PROJECT_SPEC.md avançar.
-
 model User {
   id        String   @id @default(cuid())
   name      String
