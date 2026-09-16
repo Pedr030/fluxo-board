@@ -87,6 +87,7 @@ export function CardDetailModal({
   const [editingItemText, setEditingItemText] = useState("");
   const [checklistError, setChecklistError] = useState<string | null>(null);
   const [dueDateError, setDueDateError] = useState<string | null>(null);
+  const [completedError, setCompletedError] = useState<string | null>(null);
   const newItemInputRef = useRef<HTMLInputElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -281,11 +282,11 @@ export function CardDetailModal({
   }
 
   async function handleToggleCompleted() {
-    setDueDateError(null);
+    setCompletedError(null);
     try {
       await apiUpdateCard(card.id, { completed: !card.completed });
     } catch {
-      setDueDateError("Não foi possível atualizar o status.");
+      setCompletedError("Não foi possível atualizar o status.");
     }
   }
 
@@ -405,6 +406,33 @@ export function CardDetailModal({
           </div>
           {titleError && <p className="text-sm text-red-600 dark:text-red-400">{titleError}</p>}
 
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleToggleCompleted}
+                aria-label={card.completed ? "Desmarcar como concluído" : "Marcar como concluído"}
+                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-card border transition-colors ${
+                  card.completed
+                    ? "border-flow-500 bg-flow-500 text-white"
+                    : "border-surface-border text-transparent hover:border-brand-400"
+                }`}
+              >
+                <CheckIcon className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={handleToggleCompleted}
+                className={`text-sm font-medium transition-colors ${
+                  card.completed ? "text-flow-600 dark:text-flow-400" : "text-ink-soft hover:text-ink"
+                }`}
+              >
+                {card.completed ? "Concluído" : "Marcar como concluído"}
+              </button>
+            </div>
+            {completedError && <p className="text-sm text-red-600 dark:text-red-400">{completedError}</p>}
+          </div>
+
           <div className="relative flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-medium text-ink-soft">Etiquetas</h3>
@@ -492,18 +520,6 @@ export function CardDetailModal({
           <div className="flex flex-col gap-1.5">
             <h3 className="text-sm font-medium text-ink-soft">Prazo</h3>
             <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleToggleCompleted}
-                aria-label={card.completed ? "Desmarcar como concluído" : "Marcar como concluído"}
-                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-card border transition-colors ${
-                  card.completed
-                    ? "border-flow-500 bg-flow-500 text-white"
-                    : "border-surface-border text-transparent hover:border-brand-400"
-                }`}
-              >
-                <CheckIcon className="h-3.5 w-3.5" />
-              </button>
               <div className="flex items-center gap-1 rounded-card border border-surface-border bg-surface px-2 py-1 text-sm text-ink transition-colors focus-within:border-brand-500">
                 <CalendarIcon className="h-4 w-4 shrink-0 text-ink-soft" />
                 <input
@@ -524,12 +540,8 @@ export function CardDetailModal({
                   <XIcon className="h-3.5 w-3.5" />
                 </button>
               )}
-              {card.completed ? (
-                <span className="text-xs font-medium text-flow-600 dark:text-flow-400">Concluído</span>
-              ) : (
-                isCardOverdue(card) && (
-                  <span className="text-xs font-medium text-red-600 dark:text-red-400">Vencido</span>
-                )
+              {isCardOverdue(card) && (
+                <span className="text-xs font-medium text-red-600 dark:text-red-400">Vencido</span>
               )}
             </div>
             {dueDateError && <p className="text-sm text-red-600 dark:text-red-400">{dueDateError}</p>}
