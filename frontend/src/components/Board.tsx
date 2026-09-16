@@ -96,6 +96,123 @@ function moveCardInLists(
  * volta — como moveCardInLists é idempotente, receber o próprio evento de
  * volta não causa duplicação, só confirma o que já foi aplicado.
  */
+
+type StatusFilter = "all" | "pending" | "completed";
+
+// Filtro de status (pendente/concluído) na aba "Por etiqueta" — combina
+// com o filtro de etiqueta (os dois se aplicam juntos), por isso fica
+// como um controle separado em vez de mais uma opção na lista de
+// etiquetas da barra lateral.
+function StatusFilterBar({
+  value,
+  onChange,
+}: {
+  value: StatusFilter;
+  onChange: (value: StatusFilter) => void;
+}) {
+  const options: { value: StatusFilter; label: string }[] = [
+    { value: "all", label: "Todos" },
+    { value: "pending", label: "Pendentes" },
+    { value: "completed", label: "Concluídos" },
+  ];
+  return (
+    <div className="mb-4 flex items-center gap-1.5">
+      {options.map((option) => (
+        <button
+          key={option.value}
+          onClick={() => onChange(option.value)}
+          className={`rounded-card px-3 py-1 text-xs font-medium transition-colors ${
+            value === option.value
+              ? "bg-surface text-ink shadow-card"
+              : "text-ink-soft hover:bg-surface-border/30"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Uma coluna da aba "Por etiqueta" (uma etiqueta específica, ou o grupo
+// "Sem etiqueta") — cada uma colapsa por conta própria, igual as listas
+// do quadro normal (mesmo mecanismo: estado local, não persiste, não é
+// compartilhado entre quem está vendo o board).
+function LabelColumn({
+  title,
+  color,
+  cards,
+  labels,
+  boardId,
+  emptyMessage,
+  storageKey,
+}: {
+  title: string;
+  color?: string;
+  cards: CardData[];
+  labels: Label[];
+  boardId: string;
+  emptyMessage: string;
+  storageKey: string;
+}) {
+  // Mesma lógica do colapsar de lista no quadro normal (ver List.tsx) —
+  // preferência de exibição de quem está vendo, guardada no localStorage
+  // pra sobreviver a reload e troca de aba.
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return localStorage.getItem(storageKey) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  function toggleCollapsed() {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(storageKey, next ? "1" : "0");
+      } catch {
+        // localStorage indisponível — só não persiste, toggle continua ok.
+      }
+      return next;
+    });
+  }
+
+  return (
+    <div
+      className={`flex w-80 shrink-0 flex-col gap-3 rounded-list border border-surface-border bg-surface/70 p-4 ${
+        collapsed ? "self-start" : ""
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          {color && <span style={{ backgroundColor: color }} className="h-3 w-3 shrink-0 rounded-full" />}
+          <h3 className="truncate font-display text-base font-semibold text-ink">{title}</h3>
+          <span className="shrink-0 text-sm text-ink-soft">({cards.length})</span>
+        </div>
+        <button
+          onClick={toggleCollapsed}
+          className="shrink-0 rounded-full p-1.5 text-ink-soft transition-colors hover:bg-surface-border/50 hover:text-ink"
+          aria-label={collapsed ? "Expandir coluna" : "Colapsar coluna"}
+        >
+          <ArrowLeftIcon
+            className={`h-4 w-4 transition-transform ${collapsed ? "rotate-180" : "-rotate-90"}`}
+          />
+        </button>
+      </div>
+      {!collapsed && (
+        <div className="flex flex-col gap-3">
+          {cards.map((card) => (
+            <CardTile key={card.id} card={card} labels={labels} boardId={boardId} />
+          ))}
+          {cards.length === 0 && <p className="text-sm text-ink-soft">{emptyMessage}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Board({ boardId }: { boardId: string }) {
   const [lists, setLists] = useState<ListData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -116,6 +233,13 @@ export function Board({ boardId }: { boardId: string }) {
   const [labelFilterId, setLabelFilterId] = useState<string | null>(null);
   const [labelSidebarCollapsed, setLabelSidebarCollapsed] = useState(false);
   const [labelSidebarError, setLabelSidebarError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "completed">("all");
+
+  function matchesStatusFilter(card: CardData) {
+    if (statusFilter === "pending") return !card.completed;
+    if (statusFilter === "completed") return card.completed;
+    return true;
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -719,7 +843,8 @@ export function Board({ boardId }: { boardId: string }) {
                 const label = labels.find((l) => l.id === labelFilterId);
                 const cardsWithLabel = lists
                   .flatMap((l) => l.cards)
-                  .filter((c) => c.labelIds.includes(labelFilterId));
+                  .filter((c) => c.labelIds.includes(labelFilterId))
+                  .filter(matchesStatusFilter);
                 return (
                   <main
                     className={`flex flex-1 flex-col gap-3 overflow-y-auto p-6 ${
@@ -727,6 +852,7 @@ export function Board({ boardId }: { boardId: string }) {
                     }`}
                   >
                     <div className="mx-auto flex w-full max-w-md flex-col gap-3">
+                      <StatusFilterBar value={statusFilter} onChange={setStatusFilter} />
                       <div className="flex items-center gap-2">
                         <span
                           style={{ backgroundColor: label?.color }}
@@ -749,56 +875,48 @@ export function Board({ boardId }: { boardId: string }) {
               })()
             ) : (
               <main
-                className={`flex flex-1 gap-5 overflow-x-auto p-6 ${
+                className={`flex flex-1 flex-col overflow-hidden p-6 ${
                   labelSidebarCollapsed ? "pt-14" : ""
                 }`}
               >
+                <StatusFilterBar value={statusFilter} onChange={setStatusFilter} />
+                <div className="flex flex-1 gap-5 overflow-x-auto">
                 {labels.map((label) => {
                   const cardsWithLabel = lists
                     .flatMap((l) => l.cards)
-                    .filter((c) => c.labelIds.includes(label.id));
+                    .filter((c) => c.labelIds.includes(label.id))
+                    .filter(matchesStatusFilter);
                   return (
-                    <div
+                    <LabelColumn
                       key={label.id}
-                      className="flex w-80 shrink-0 flex-col gap-3 rounded-list border border-surface-border bg-surface/70 p-4"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span
-                          style={{ backgroundColor: label.color }}
-                          className="h-3 w-3 shrink-0 rounded-full"
-                        />
-                        <h3 className="font-display text-base font-semibold text-ink">
-                          {label.name || "Sem nome"}
-                        </h3>
-                        <span className="text-sm text-ink-soft">({cardsWithLabel.length})</span>
-                      </div>
-                      <div className="flex flex-col gap-3">
-                        {cardsWithLabel.map((card) => (
-                          <CardTile key={card.id} card={card} labels={labels} boardId={boardId} />
-                        ))}
-                        {cardsWithLabel.length === 0 && (
-                          <p className="text-sm text-ink-soft">Nenhum card com essa etiqueta.</p>
-                        )}
-                      </div>
-                    </div>
+                      title={label.name || "Sem nome"}
+                      color={label.color}
+                      cards={cardsWithLabel}
+                      labels={labels}
+                      boardId={boardId}
+                      emptyMessage="Nenhum card com essa etiqueta."
+                      storageKey={`fluxo_label_column_collapsed_${boardId}_${label.id}`}
+                    />
                   );
                 })}
 
                 {(() => {
-                  const unlabeled = lists.flatMap((l) => l.cards).filter((c) => c.labelIds.length === 0);
+                  const unlabeled = lists
+                    .flatMap((l) => l.cards)
+                    .filter((c) => c.labelIds.length === 0)
+                    .filter(matchesStatusFilter);
                   return (
-                    <div className="flex w-80 shrink-0 flex-col gap-3 rounded-list border border-surface-border bg-surface/70 p-4">
-                      <h3 className="font-display text-base font-semibold text-ink">
-                        Sem etiqueta ({unlabeled.length})
-                      </h3>
-                      <div className="flex flex-col gap-3">
-                        {unlabeled.map((card) => (
-                          <CardTile key={card.id} card={card} labels={labels} boardId={boardId} />
-                        ))}
-                      </div>
-                    </div>
+                    <LabelColumn
+                      title="Sem etiqueta"
+                      cards={unlabeled}
+                      labels={labels}
+                      boardId={boardId}
+                      emptyMessage="Nenhum card sem etiqueta."
+                      storageKey={`fluxo_label_column_collapsed_${boardId}_unlabeled`}
+                    />
                   );
                 })()}
+                </div>
               </main>
             )}
           </div>
