@@ -453,4 +453,38 @@ describe("Socket.io: sincronização em tempo real", () => {
     expect(payload.activity.summary).toBe('criou a lista "Lista ao vivo"');
     expect(payload.activity.user.name).toBe("a");
   });
+
+  it("member:updated chega em tempo real quando o dono promove alguém a admin", async () => {
+    const tokenA = await registerAndGetToken("a@teste.com");
+    const boardRes = await request(app)
+      .post("/boards")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ title: "Board" });
+    const boardId = boardRes.body.board.id;
+
+    const tokenB = await registerAndGetToken("b@teste.com");
+    const inviteRes = await request(app)
+      .post(`/boards/${boardId}/invite`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ email: "b@teste.com" });
+    const memberId = inviteRes.body.member.id;
+
+    const clientA = await connectClient(tokenA);
+    const clientB = await connectClient(tokenB);
+
+    clientA.emit("board:join", boardId);
+    clientB.emit("board:join", boardId);
+    await new Promise((r) => setTimeout(r, 150));
+
+    const eventPromise = waitForEvent(clientB, "member:updated");
+
+    await request(app)
+      .patch(`/boards/${boardId}/members/${memberId}`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ role: "ADMIN" });
+
+    const payload = await eventPromise;
+    expect(payload.member.role).toBe("ADMIN");
+    expect(payload.member.id).toBe(memberId);
+  });
 });

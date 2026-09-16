@@ -51,6 +51,7 @@ export function CardDetailModal({
   card,
   labels,
   members,
+  canEdit,
   boardId,
   open,
   onClose,
@@ -59,6 +60,7 @@ export function CardDetailModal({
   card: CardData;
   labels: Label[];
   members: Member[];
+  canEdit: boolean;
   boardId: string;
   open: boolean;
   onClose: () => void;
@@ -394,8 +396,10 @@ export function CardDetailModal({
               ) : (
                 <h2
                   id="card-detail-title"
-                  onClick={() => setEditingTitle(true)}
-                  className="cursor-text font-display text-xl font-semibold text-ink"
+                  onClick={canEdit ? () => setEditingTitle(true) : undefined}
+                  className={`font-display text-xl font-semibold text-ink ${
+                    canEdit ? "cursor-text" : ""
+                  }`}
                 >
                   {card.title}
                 </h2>
@@ -403,15 +407,22 @@ export function CardDetailModal({
               {card.createdAt && (
                 <p className="text-xs text-ink-soft">Criado em {formatDate(card.createdAt)}</p>
               )}
+              {!canEdit && (
+                <p className="text-xs text-ink-soft">
+                  Esse card está atribuído a outra pessoa — você só edita os seus.
+                </p>
+              )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              <button
-                onClick={onDelete}
-                aria-label="Excluir card"
-                className="rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600"
-              >
-                <TrashIcon className="h-5 w-5" />
-              </button>
+              {canEdit && (
+                <button
+                  onClick={onDelete}
+                  aria-label="Excluir card"
+                  className="rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600"
+                >
+                  <TrashIcon className="h-5 w-5" />
+                </button>
+              )}
               <button
                 ref={closeRef}
                 onClick={onClose}
@@ -428,9 +439,10 @@ export function CardDetailModal({
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                disabled={!canEdit}
                 onClick={handleToggleCompleted}
                 aria-label={card.completed ? "Desmarcar como concluído" : "Marcar como concluído"}
-                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-card border transition-colors ${
+                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-card border transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                   card.completed
                     ? "border-flow-500 bg-flow-500 text-white"
                     : "border-surface-border text-transparent hover:border-brand-400"
@@ -440,8 +452,9 @@ export function CardDetailModal({
               </button>
               <button
                 type="button"
+                disabled={!canEdit}
                 onClick={handleToggleCompleted}
-                className={`text-sm font-medium transition-colors ${
+                className={`text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                   card.completed ? "text-flow-600 dark:text-flow-400" : "text-ink-soft hover:text-ink"
                 }`}
               >
@@ -455,8 +468,9 @@ export function CardDetailModal({
             <h3 className="text-sm font-medium text-ink-soft">Responsável</h3>
             <button
               type="button"
+              disabled={!canEdit}
               onClick={() => setAssigneePickerOpen((v) => !v)}
-              className="flex w-fit items-center gap-2 rounded-card border border-surface-border bg-surface px-2 py-1.5 text-sm text-ink transition-colors hover:border-brand-400"
+              className="flex w-fit items-center gap-2 rounded-card border border-surface-border bg-surface px-2 py-1.5 text-sm text-ink transition-colors hover:border-brand-400 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-surface-border"
             >
               {card.assignee ? (
                 <>
@@ -606,12 +620,13 @@ export function CardDetailModal({
                 <input
                   type="date"
                   aria-label="Data de vencimento"
+                  disabled={!canEdit}
                   value={card.dueDate ? card.dueDate.slice(0, 10) : ""}
                   onChange={(e) => handleChangeDueDate(e.target.value)}
-                  className="bg-transparent outline-none [color-scheme:light] dark:[color-scheme:dark]"
+                  className="bg-transparent outline-none [color-scheme:light] dark:[color-scheme:dark] disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </div>
-              {card.dueDate && (
+              {card.dueDate && canEdit && (
                 <button
                   type="button"
                   onClick={() => handleChangeDueDate("")}
@@ -645,10 +660,10 @@ export function CardDetailModal({
               />
             ) : (
               <p
-                onClick={() => setEditingDescription(true)}
-                className={`cursor-text whitespace-pre-wrap rounded-card border border-transparent p-3 text-sm transition-colors hover:border-surface-border hover:bg-surface-border/20 ${
-                  card.description ? "text-ink" : "text-ink-soft"
-                }`}
+                onClick={canEdit ? () => setEditingDescription(true) : undefined}
+                className={`whitespace-pre-wrap rounded-card border border-transparent p-3 text-sm transition-colors ${
+                  canEdit ? "cursor-text hover:border-surface-border hover:bg-surface-border/20" : ""
+                } ${card.description ? "text-ink" : "text-ink-soft"}`}
               >
                 {card.description || "Adicionar uma descrição mais detalhada..."}
               </p>

@@ -5,7 +5,7 @@ import { z } from "zod";
 import { prisma } from "../prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { logActivity } from "../lib/activity";
-import { isBoardMember } from "../lib/authorization";
+import { canEditCard, getBoardMembership, isBoardMember } from "../lib/authorization";
 import { attachmentObjectKey, removeAttachment } from "../lib/supabaseStorage";
 
 const createCardSchema = z.object({
@@ -112,8 +112,12 @@ export async function updateCard(req: AuthRequest, res: Response) {
   if (!sourceList) {
     return res.status(404).json({ error: "Lista não encontrada" });
   }
-  if (!(await isBoardMember(sourceList.boardId, req.userId!))) {
+  const membership = await getBoardMembership(sourceList.boardId, req.userId!);
+  if (!membership) {
     return res.status(403).json({ error: "Você não é membro deste board" });
+  }
+  if (!canEditCard(membership, card, req.userId!)) {
+    return res.status(403).json({ error: "Esse card está atribuído a outra pessoa" });
   }
 
   const io = req.app.get("io") as Server;
@@ -275,8 +279,12 @@ export async function deleteCard(req: AuthRequest, res: Response) {
   if (!list) {
     return res.status(404).json({ error: "Lista não encontrada" });
   }
-  if (!(await isBoardMember(list.boardId, req.userId!))) {
+  const membership = await getBoardMembership(list.boardId, req.userId!);
+  if (!membership) {
     return res.status(403).json({ error: "Você não é membro deste board" });
+  }
+  if (!canEditCard(membership, card, req.userId!)) {
+    return res.status(403).json({ error: "Esse card está atribuído a outra pessoa" });
   }
 
   // Precisa buscar os anexos ANTES da transação: onDelete: Cascade no

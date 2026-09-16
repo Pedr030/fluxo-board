@@ -39,11 +39,15 @@ export function List({
   list,
   labels,
   members,
+  currentUserId,
+  restricted,
   boardId,
 }: {
   list: ListData;
   labels: Label[];
   members: Member[];
+  currentUserId: string | null;
+  restricted: boolean;
   boardId: string;
 }) {
   const {
@@ -211,7 +215,15 @@ export function List({
           <div ref={setDroppableRef} className="flex min-h-[40px] flex-col gap-3">
             <SortableContext items={list.cards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
               {list.cards.map((card) => (
-                <Card key={card.id} card={card} labels={labels} members={members} boardId={boardId} />
+                <Card
+                  key={card.id}
+                  card={card}
+                  labels={labels}
+                  members={members}
+                  currentUserId={currentUserId}
+                  restricted={restricted}
+                  boardId={boardId}
+                />
               ))}
             </SortableContext>
           </div>

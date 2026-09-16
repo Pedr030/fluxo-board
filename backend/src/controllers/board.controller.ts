@@ -129,7 +129,9 @@ export async function getBoard(req: AuthRequest, res: Response) {
     })),
   }));
 
-  return res.json({ board: { ...board, lists, myRole: membership.role } });
+  return res.json({
+    board: { ...board, lists, myRole: membership.role, myRestricted: membership.restricted },
+  });
 }
 
 const inviteSchema = z.object({
@@ -140,7 +142,8 @@ const inviteSchema = z.object({
  * POST /boards/:id/invite  { email: string }
  * Adiciona o usuário desse email como membro (role MEMBER). Exige um
  * usuário já cadastrado — convite por link/token pra quem ainda não tem
- * conta fica pra uma versão futura (ver PROJECT_SPEC.md).
+ * conta fica pra uma versão futura (ver PROJECT_SPEC.md). OWNER e ADMIN
+ * podem convidar — é justamente a diferença entre ADMIN e MEMBER comum.
  */
 export async function inviteMember(req: AuthRequest, res: Response) {
   const parsed = inviteSchema.safeParse(req.body);
@@ -155,8 +158,8 @@ export async function inviteMember(req: AuthRequest, res: Response) {
   if (!requester) {
     return res.status(403).json({ error: "Você não é membro deste board" });
   }
-  if (requester.role !== "OWNER") {
-    return res.status(403).json({ error: "Só o dono do board pode convidar membros" });
+  if (requester.role !== "OWNER" && requester.role !== "ADMIN") {
+    return res.status(403).json({ error: "Só o dono ou um admin do board pode convidar membros" });
   }
 
   const invitedUser = await prisma.user.findUnique({ where: { email: parsed.data.email } });
@@ -198,10 +201,96 @@ export async function listMembers(req: AuthRequest, res: Response) {
     where: { boardId },
     include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
   });
-  // OWNER primeiro — mais natural na tela do que a ordem de entrada.
-  members.sort((a, b) => (a.role === b.role ? 0 : a.role === "OWNER" ? -1 : 1));
+  // OWNER, depois ADMIN, depois MEMBER — mais natural na tela do que a
+  // ordem de entrada.
+  const roleOrder = { OWNER: 0, ADMIN: 1, MEMBER: 2 };
+  members.sort((a, b) => roleOrder[a.role] - roleOrder[b.role]);
 
   return res.json({ members });
+}
+
+const updateMemberSchema = z.object({
+  role: z.enum(["ADMIN", "MEMBER"]).optional(),
+  restricted: z.boolean().optional(),
+});
+
+/**
+ * PATCH /boards/:id/members/:memberId  { role?, restricted? }
+ * Só o OWNER gerencia isso — promover/rebaixar ADMIN↔MEMBER, ou ligar/
+ * desligar a restrição "só edita os próprios cards". O alvo não pode ser
+ * o próprio OWNER (trocar quem é dono é a exclusão de conta com
+ * transferência de posse, um fluxo totalmente à parte). Promover a ADMIN
+ * sempre limpa `restricted` — não faz sentido alguém que já pode convidar
+ * gente nova ficar travado nos próprios cards.
+ */
+export async function updateMember(req: AuthRequest, res: Response) {
+  const parsed = updateMemberSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const { role, restricted } = parsed.data;
+  if (role === undefined && restricted === undefined) {
+    return res.status(400).json({ error: "Nada para atualizar" });
+  }
+  const boardId = req.params.id;
+  const memberId = req.params.memberId;
+
+  const requester = await prisma.boardMember.findUnique({
+    where: { boardId_userId: { boardId, userId: req.userId! } },
+  });
+  if (!requester) {
+    return res.status(403).json({ error: "Você não é membro deste board" });
+  }
+  if (requester.role !== "OWNER") {
+    return res.status(403).json({ error: "Só o dono do board pode gerenciar membros" });
+  }
+
+  const target = await prisma.boardMember.findUnique({
+    where: { id: memberId },
+    include: { user: { select: { name: true } } },
+  });
+  if (!target || target.boardId !== boardId) {
+    return res.status(404).json({ error: "Membro não encontrado" });
+  }
+  if (target.role === "OWNER") {
+    return res.status(400).json({ error: "Não dá pra mudar o cargo do dono por aqui" });
+  }
+
+  const effectiveRole = role ?? target.role;
+  if (restricted === true && effectiveRole === "ADMIN") {
+    return res.status(400).json({ error: "Admin não pode ficar restrito aos próprios cards" });
+  }
+  const effectiveRestricted = effectiveRole === "ADMIN" ? false : restricted ?? target.restricted;
+
+  const updated = await prisma.boardMember.update({
+    where: { id: memberId },
+    data: { ...(role !== undefined ? { role } : {}), restricted: effectiveRestricted },
+    include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
+  });
+
+  const io = req.app.get("io") as Server;
+  io.to(boardId).emit("member:updated", { member: updated });
+
+  if (role !== undefined && role !== target.role) {
+    await logActivity(
+      io,
+      boardId,
+      req.userId,
+      role === "ADMIN" ? `promoveu ${target.user.name} a admin` : `removeu ${target.user.name} de admin`
+    );
+  }
+  if (effectiveRestricted !== target.restricted) {
+    await logActivity(
+      io,
+      boardId,
+      req.userId,
+      effectiveRestricted
+        ? `restringiu ${target.user.name} aos próprios cards`
+        : `removeu a restrição de ${target.user.name}`
+    );
+  }
+
+  return res.json({ member: updated });
 }
 
 /**

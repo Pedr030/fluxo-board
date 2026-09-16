@@ -43,6 +43,14 @@ model Board {
 
 enum Role {
   OWNER
+  // Tudo que MEMBER pode + convidar gente nova. Não é "mais confiável que
+  // MEMBER" em relação aos próprios cards — a restrição de "só edita os
+  // próprios cards" (campo `restricted` abaixo) é uma dimensão separada
+  // do cargo, não amarrada a ele. Só o OWNER promove/rebaixa ADMIN
+  // (ver updateMember em board.controller.ts) — a própria conta OWNER
+  // não muda de cargo por aqui (isso é a exclusão de conta com
+  // transferência de posse, um fluxo à parte).
+  ADMIN
   MEMBER
 }
 
@@ -51,6 +59,12 @@ model BoardMember {
   boardId String
   userId  String
   role    Role   @default(MEMBER)
+  // Quando true, essa pessoa só pode editar/mover/excluir cards que
+  // estejam atribuídos a ela (ou sem responsável nenhum — "livres pra
+  // pegar"). Não afeta comentar, checklist, etiquetas nem anexos, que
+  // continuam abertos pra qualquer membro. Só faz sentido em MEMBER —
+  // promover alguém a ADMIN limpa essa flag (ver updateMember).
+  restricted Boolean @default(false)
 
   board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
   // onDelete: Cascade aqui (e não em Board.owner) é proposital — excluir a

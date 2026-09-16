@@ -133,12 +133,14 @@ export interface User {
   avatarUrl: string | null;
 }
 
+export type Role = "OWNER" | "ADMIN" | "MEMBER";
+
 export interface Board {
   id: string;
   title: string;
   ownerId: string;
   createdAt: string;
-  myRole: "OWNER" | "MEMBER";
+  myRole: Role;
 }
 
 export interface ChecklistItem {
@@ -180,11 +182,13 @@ export interface Label {
 export interface BoardDetail extends Board {
   lists: ListItem[];
   labels: Label[];
+  myRestricted: boolean;
 }
 
 export interface Member {
   id: string;
-  role: "OWNER" | "MEMBER";
+  role: Role;
+  restricted: boolean;
   user: User;
 }
 
@@ -279,6 +283,16 @@ export const inviteMember = (boardId: string, email: string) =>
 
 export const listMembers = (boardId: string) =>
   apiFetch<{ members: Member[] }>(`/boards/${boardId}/members`);
+
+export const updateMember = (
+  boardId: string,
+  memberId: string,
+  data: { role?: "ADMIN" | "MEMBER"; restricted?: boolean }
+) =>
+  apiFetch<{ member: Member }>(`/boards/${boardId}/members/${memberId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
 
 export const listActivity = (boardId: string) =>
   apiFetch<{ activities: Activity[] }>(`/boards/${boardId}/activity`);

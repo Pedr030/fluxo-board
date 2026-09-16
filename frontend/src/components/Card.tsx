@@ -41,6 +41,23 @@ export function isCardOverdue(card: Pick<CardData, "dueDate" | "completed">): bo
   return card.dueDate.slice(0, 10) < todayDateString();
 }
 
+/**
+ * Espelha a checagem do backend (`canEditCard` em authorization.ts): um
+ * membro "restricted" só edita/move/exclui cards atribuídos a ele mesmo
+ * (ou sem responsável nenhum — livres pra pegar). Usado só pra já
+ * esconder/desabilitar os controles certos na tela — o backend reforça
+ * de qualquer forma, isso aqui é só pra não deixar a pessoa tentar algo
+ * que vai voltar 403.
+ */
+export function canEditCard(
+  card: Pick<CardData, "assignee">,
+  currentUserId: string | null,
+  restricted: boolean
+): boolean {
+  if (!restricted) return true;
+  return card.assignee === null || card.assignee.id === currentUserId;
+}
+
 function todayDateString(): string {
   const now = new Date();
   const year = now.getFullYear();
@@ -172,15 +189,21 @@ export function Card({
   card,
   labels,
   members,
+  currentUserId,
+  restricted,
   boardId,
 }: {
   card: CardData;
   labels: Label[];
   members: Member[];
+  currentUserId: string | null;
+  restricted: boolean;
   boardId: string;
 }) {
+  const editable = canEditCard(card, currentUserId, restricted);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
+    disabled: !editable,
     data: { type: "card" },
   });
   const [detailOpen, setDetailOpen] = useState(false);
@@ -225,7 +248,7 @@ export function Card({
         {...attributes}
         {...listeners}
         aria-label={`Card "${card.title}" — arraste ou use as setas do teclado para mover`}
-        className="cursor-grab touch-none active:cursor-grabbing"
+        className={editable ? "cursor-grab touch-none active:cursor-grabbing" : "touch-none"}
       >
         <div
           onClick={() => setDetailOpen(true)}
@@ -236,29 +259,33 @@ export function Card({
           <CardBody card={card} labels={labels} />
         </div>
       </div>
-      <button
-        onClick={() => setConfirmOpen(true)}
-        onPointerDown={(e) => e.stopPropagation()}
-        className="absolute right-1 top-1 hidden rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover/card:block"
-        aria-label="Excluir card"
-      >
-        <TrashIcon className="h-3.5 w-3.5" />
-      </button>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          handleToggleComplete();
-        }}
-        onPointerDown={(e) => e.stopPropagation()}
-        aria-label={card.completed ? "Desmarcar como concluído" : "Marcar como concluído"}
-        className={`absolute right-1.5 top-9 hidden h-5 w-5 items-center justify-center rounded-full border transition-colors group-hover/card:flex ${
-          card.completed
-            ? "border-flow-500 bg-flow-500 text-white"
-            : "border-surface-border bg-surface text-transparent hover:border-flow-400"
-        }`}
-      >
-        <CheckIcon className="h-3 w-3" />
-      </button>
+      {editable && (
+        <>
+          <button
+            onClick={() => setConfirmOpen(true)}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="absolute right-1 top-1 hidden rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover/card:block"
+            aria-label="Excluir card"
+          >
+            <TrashIcon className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggleComplete();
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            aria-label={card.completed ? "Desmarcar como concluído" : "Marcar como concluído"}
+            className={`absolute right-1.5 top-9 hidden h-5 w-5 items-center justify-center rounded-full border transition-colors group-hover/card:flex ${
+              card.completed
+                ? "border-flow-500 bg-flow-500 text-white"
+                : "border-surface-border bg-surface text-transparent hover:border-flow-400"
+            }`}
+          >
+            <CheckIcon className="h-3 w-3" />
+          </button>
+        </>
+      )}
       <ConfirmDialog
         open={confirmOpen}
         title="Excluir este card?"
@@ -272,6 +299,7 @@ export function Card({
         card={card}
         labels={labels}
         members={members}
+        canEdit={editable}
         boardId={boardId}
         open={detailOpen}
         onClose={() => setDetailOpen(false)}

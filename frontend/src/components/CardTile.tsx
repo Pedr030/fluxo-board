@@ -7,7 +7,7 @@ import {
   deleteCard as apiDeleteCard,
   updateCard as apiUpdateCard,
 } from "@/lib/api";
-import { CardBody, CardData } from "./Card";
+import { CardBody, CardData, canEditCard } from "./Card";
 import { CardDetailModal } from "./CardDetailModal";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { CheckIcon, TrashIcon } from "./icons";
@@ -24,13 +24,18 @@ export function CardTile({
   card,
   labels,
   members,
+  currentUserId,
+  restricted,
   boardId,
 }: {
   card: CardData;
   labels: Label[];
   members: Member[];
+  currentUserId: string | null;
+  restricted: boolean;
   boardId: string;
 }) {
+  const editable = canEditCard(card, currentUserId, restricted);
   const [detailOpen, setDetailOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -69,27 +74,31 @@ export function CardTile({
       >
         <CardBody card={card} labels={labels} />
       </div>
-      <button
-        onClick={() => setConfirmOpen(true)}
-        className="absolute right-1 top-1 hidden rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover/card:block"
-        aria-label="Excluir card"
-      >
-        <TrashIcon className="h-3.5 w-3.5" />
-      </button>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          handleToggleComplete();
-        }}
-        aria-label={card.completed ? "Desmarcar como concluído" : "Marcar como concluído"}
-        className={`absolute right-1.5 top-9 hidden h-5 w-5 items-center justify-center rounded-full border transition-colors group-hover/card:flex ${
-          card.completed
-            ? "border-flow-500 bg-flow-500 text-white"
-            : "border-surface-border bg-surface text-transparent hover:border-flow-400"
-        }`}
-      >
-        <CheckIcon className="h-3 w-3" />
-      </button>
+      {editable && (
+        <>
+          <button
+            onClick={() => setConfirmOpen(true)}
+            className="absolute right-1 top-1 hidden rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover/card:block"
+            aria-label="Excluir card"
+          >
+            <TrashIcon className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggleComplete();
+            }}
+            aria-label={card.completed ? "Desmarcar como concluído" : "Marcar como concluído"}
+            className={`absolute right-1.5 top-9 hidden h-5 w-5 items-center justify-center rounded-full border transition-colors group-hover/card:flex ${
+              card.completed
+                ? "border-flow-500 bg-flow-500 text-white"
+                : "border-surface-border bg-surface text-transparent hover:border-flow-400"
+            }`}
+          >
+            <CheckIcon className="h-3 w-3" />
+          </button>
+        </>
+      )}
       <ConfirmDialog
         open={confirmOpen}
         title="Excluir este card?"
@@ -103,6 +112,7 @@ export function CardTile({
         card={card}
         labels={labels}
         members={members}
+        canEdit={editable}
         boardId={boardId}
         open={detailOpen}
         onClose={() => setDetailOpen(false)}
