@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Label, deleteCard as apiDeleteCard } from "@/lib/api";
+import { Label, deleteCard as apiDeleteCard, updateCard as apiUpdateCard } from "@/lib/api";
 import { CardBody, CardData } from "./Card";
 import { CardDetailModal } from "./CardDetailModal";
 import { ConfirmDialog } from "./ConfirmDialog";
-import { TrashIcon } from "./icons";
+import { CheckIcon, TrashIcon } from "./icons";
 
 /**
  * Card não-arrastável — usado na aba "Por etiqueta" do board, que agrupa
@@ -42,11 +42,23 @@ export function CardTile({
     }
   }
 
+  // Sem tratamento de erro visível de propósito — ver mesmo comentário
+  // em Card.tsx.
+  async function handleToggleComplete() {
+    try {
+      await apiUpdateCard(card.id, { completed: !card.completed });
+    } catch {
+      // silencioso, ver comentário acima
+    }
+  }
+
   return (
     <div className="group/card relative">
       <div
         onClick={() => setDetailOpen(true)}
-        className="cursor-pointer rounded-card border border-surface-border bg-surface p-4 pr-8 text-base font-medium text-ink shadow-card transition-shadow hover:shadow-none"
+        className={`cursor-pointer rounded-card border border-surface-border bg-surface p-4 pr-8 text-base font-medium text-ink shadow-card transition-all hover:shadow-none ${
+          card.completed ? "opacity-50" : ""
+        }`}
       >
         <CardBody card={card} labels={labels} />
       </div>
@@ -56,6 +68,20 @@ export function CardTile({
         aria-label="Excluir card"
       >
         <TrashIcon className="h-3.5 w-3.5" />
+      </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          handleToggleComplete();
+        }}
+        aria-label={card.completed ? "Desmarcar como concluído" : "Marcar como concluído"}
+        className={`absolute right-1.5 top-9 hidden h-5 w-5 items-center justify-center rounded-full border transition-colors group-hover/card:flex ${
+          card.completed
+            ? "border-flow-500 bg-flow-500 text-white"
+            : "border-surface-border bg-surface text-transparent hover:border-flow-400"
+        }`}
+      >
+        <CheckIcon className="h-3 w-3" />
       </button>
       <ConfirmDialog
         open={confirmOpen}

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChecklistItem, Label, deleteCard as apiDeleteCard } from "@/lib/api";
+import { ChecklistItem, Label, deleteCard as apiDeleteCard, updateCard as apiUpdateCard } from "@/lib/api";
 import { CardDetailModal } from "./CardDetailModal";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { CalendarIcon, CheckIcon, TrashIcon } from "./icons";
@@ -98,7 +98,7 @@ export function CardBody({ card, labels }: { card: CardData; labels: Label[] }) 
           {card.description}
         </p>
       )}
-      {(card.checklistItems.length > 0 || card.dueDate) && (
+      {(card.checklistItems.length > 0 || card.dueDate || card.completed) && (
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {card.checklistItems.length > 0 && (
             <div
@@ -110,6 +110,12 @@ export function CardBody({ card, labels }: { card: CardData; labels: Label[] }) 
             >
               <CheckIcon className="h-3 w-3" />
               {card.checklistItems.filter((i) => i.done).length}/{card.checklistItems.length}
+            </div>
+          )}
+          {card.completed && !card.dueDate && (
+            <div className="flex w-fit items-center gap-1 rounded-card bg-flow-100 px-1.5 py-0.5 text-xs font-medium text-flow-700 dark:bg-flow-500/20 dark:text-flow-400">
+              <CheckIcon className="h-3 w-3" />
+              Concluído
             </div>
           )}
           {card.dueDate && (
@@ -184,6 +190,18 @@ export function Card({
     }
   }
 
+  // Sem tratamento de erro visível de propósito: é um toggle rápido
+  // direto no quadro, sem lugar pra mostrar mensagem de erro por perto.
+  // Se a chamada falhar, nenhum evento de socket chega e o card
+  // simplesmente não muda — dá pra tentar de novo.
+  async function handleToggleComplete() {
+    try {
+      await apiUpdateCard(card.id, { completed: !card.completed });
+    } catch {
+      // silencioso, ver comentário acima
+    }
+  }
+
   return (
     <div ref={setNodeRef} style={style} className="group/card relative">
       <div
@@ -194,7 +212,9 @@ export function Card({
       >
         <div
           onClick={() => setDetailOpen(true)}
-          className="cursor-pointer rounded-card border border-surface-border bg-surface p-4 pr-8 text-base font-medium text-ink shadow-card transition-shadow hover:shadow-none"
+          className={`cursor-pointer rounded-card border border-surface-border bg-surface p-4 pr-8 text-base font-medium text-ink shadow-card transition-all hover:shadow-none ${
+            card.completed ? "opacity-50" : ""
+          }`}
         >
           <CardBody card={card} labels={labels} />
         </div>
@@ -206,6 +226,21 @@ export function Card({
         aria-label="Excluir card"
       >
         <TrashIcon className="h-3.5 w-3.5" />
+      </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          handleToggleComplete();
+        }}
+        onPointerDown={(e) => e.stopPropagation()}
+        aria-label={card.completed ? "Desmarcar como concluído" : "Marcar como concluído"}
+        className={`absolute right-1.5 top-9 hidden h-5 w-5 items-center justify-center rounded-full border transition-colors group-hover/card:flex ${
+          card.completed
+            ? "border-flow-500 bg-flow-500 text-white"
+            : "border-surface-border bg-surface text-transparent hover:border-flow-400"
+        }`}
+      >
+        <CheckIcon className="h-3 w-3" />
       </button>
       <ConfirmDialog
         open={confirmOpen}
