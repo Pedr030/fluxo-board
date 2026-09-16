@@ -203,4 +203,10 @@ model Activity {
 
   board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
   user  User? @relation("ActivityActor", fields: [userId], references: [id], onDelete: SetNull)
+
+  // Toda listagem filtra por boardId e ordena por createdAt (ver
+  // listActivity) — sem isso, o Postgres não tem índice nenhum pra essa
+  // coluna (FK simples não ganha índice automático) e faria scan
+  // completo da tabela a cada aba de Atividade aberta.
+  @@index([boardId, createdAt])
 }
