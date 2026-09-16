@@ -3,7 +3,14 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { ChecklistItem, Label, deleteCard as apiDeleteCard, updateCard as apiUpdateCard } from "@/lib/api";
+import {
+  ChecklistItem,
+  Label,
+  Member,
+  deleteCard as apiDeleteCard,
+  updateCard as apiUpdateCard,
+} from "@/lib/api";
+import { Avatar } from "./Avatar";
 import { CardDetailModal } from "./CardDetailModal";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { CalendarIcon, CheckIcon, TrashIcon } from "./icons";
@@ -17,6 +24,7 @@ export interface CardData {
   completed: boolean;
   labelIds: string[];
   checklistItems: ChecklistItem[];
+  assignee: { id: string; name: string; avatarUrl: string | null } | null;
 }
 
 /**
@@ -31,6 +39,23 @@ export interface CardData {
 export function isCardOverdue(card: Pick<CardData, "dueDate" | "completed">): boolean {
   if (!card.dueDate || card.completed) return false;
   return card.dueDate.slice(0, 10) < todayDateString();
+}
+
+/**
+ * Espelha a checagem do backend (`canEditCard` em authorization.ts): um
+ * membro "restricted" só edita/move/exclui cards atribuídos a ele mesmo
+ * (ou sem responsável nenhum — livres pra pegar). Usado só pra já
+ * esconder/desabilitar os controles certos na tela — o backend reforça
+ * de qualquer forma, isso aqui é só pra não deixar a pessoa tentar algo
+ * que vai voltar 403.
+ */
+export function canEditCard(
+  card: Pick<CardData, "assignee">,
+  currentUserId: string | null,
+  restricted: boolean
+): boolean {
+  if (!restricted) return true;
+  return card.assignee === null || card.assignee.id === currentUserId;
 }
 
 function todayDateString(): string {
@@ -92,7 +117,14 @@ export function CardBody({ card, labels }: { card: CardData; labels: Label[] }) 
           })}
         </div>
       )}
-      <p>{card.title}</p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="min-w-0 flex-1">{card.title}</p>
+        {card.assignee && (
+          <span title={`Responsável: ${card.assignee.name}`} className="shrink-0">
+            <Avatar name={card.assignee.name} avatarUrl={card.assignee.avatarUrl} className="h-6 w-6 text-xs" />
+          </span>
+        )}
+      </div>
       {card.description && (
         <p className="mt-2 line-clamp-2 break-words text-sm font-normal text-ink-soft">
           {card.description}
@@ -156,14 +188,22 @@ export function CardBody({ card, labels }: { card: CardData; labels: Label[] }) 
 export function Card({
   card,
   labels,
+  members,
+  currentUserId,
+  restricted,
   boardId,
 }: {
   card: CardData;
   labels: Label[];
+  members: Member[];
+  currentUserId: string | null;
+  restricted: boolean;
   boardId: string;
 }) {
+  const editable = canEditCard(card, currentUserId, restricted);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: card.id,
+    disabled: !editable,
     data: { type: "card" },
   });
   const [detailOpen, setDetailOpen] = useState(false);
@@ -208,7 +248,7 @@ export function Card({
         {...attributes}
         {...listeners}
         aria-label={`Card "${card.title}" — arraste ou use as setas do teclado para mover`}
-        className="cursor-grab touch-none active:cursor-grabbing"
+        className={editable ? "cursor-grab touch-none active:cursor-grabbing" : "touch-none"}
       >
         <div
           onClick={() => setDetailOpen(true)}
@@ -219,29 +259,33 @@ export function Card({
           <CardBody card={card} labels={labels} />
         </div>
       </div>
-      <button
-        onClick={() => setConfirmOpen(true)}
-        onPointerDown={(e) => e.stopPropagation()}
-        className="absolute right-1 top-1 hidden rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover/card:block"
-        aria-label="Excluir card"
-      >
-        <TrashIcon className="h-3.5 w-3.5" />
-      </button>
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          handleToggleComplete();
-        }}
-        onPointerDown={(e) => e.stopPropagation()}
-        aria-label={card.completed ? "Desmarcar como concluído" : "Marcar como concluído"}
-        className={`absolute right-1.5 top-9 hidden h-5 w-5 items-center justify-center rounded-full border transition-colors group-hover/card:flex ${
-          card.completed
-            ? "border-flow-500 bg-flow-500 text-white"
-            : "border-surface-border bg-surface text-transparent hover:border-flow-400"
-        }`}
-      >
-        <CheckIcon className="h-3 w-3" />
-      </button>
+      {editable && (
+        <>
+          <button
+            onClick={() => setConfirmOpen(true)}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="absolute right-1 top-1 hidden rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600 group-hover/card:block"
+            aria-label="Excluir card"
+          >
+            <TrashIcon className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggleComplete();
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+            aria-label={card.completed ? "Desmarcar como concluído" : "Marcar como concluído"}
+            className={`absolute right-1.5 top-9 hidden h-5 w-5 items-center justify-center rounded-full border transition-colors group-hover/card:flex ${
+              card.completed
+                ? "border-flow-500 bg-flow-500 text-white"
+                : "border-surface-border bg-surface text-transparent hover:border-flow-400"
+            }`}
+          >
+            <CheckIcon className="h-3 w-3" />
+          </button>
+        </>
+      )}
       <ConfirmDialog
         open={confirmOpen}
         title="Excluir este card?"
@@ -254,6 +298,8 @@ export function Card({
       <CardDetailModal
         card={card}
         labels={labels}
+        members={members}
+        canEdit={editable}
         boardId={boardId}
         open={detailOpen}
         onClose={() => setDetailOpen(false)}

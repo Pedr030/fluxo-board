@@ -5,12 +5,14 @@ import { z } from "zod";
 import { prisma } from "../prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
 import { logActivity } from "../lib/activity";
-import { isBoardMember } from "../lib/authorization";
+import { canEditCard, getBoardMembership, isBoardMember } from "../lib/authorization";
 import { attachmentObjectKey, removeAttachment } from "../lib/supabaseStorage";
 
 const createCardSchema = z.object({
   title: z.string().min(1),
 });
+
+const assigneeSelect = { id: true, name: true, avatarUrl: true };
 
 // Card + cardLabels (join) -> card + labelIds (achatado). Usado sempre que
 // um endpoint devolve um card inteiro via socket — o evento substitui o
@@ -47,7 +49,12 @@ export async function createCard(req: AuthRequest, res: Response) {
     data: { title: parsed.data.title, listId, position, creatorId: req.userId },
   });
 
-  const cardWithLabels = { ...card, labelIds: [] as string[], checklistItems: [] as ChecklistItem[] };
+  const cardWithLabels = {
+    ...card,
+    labelIds: [] as string[],
+    checklistItems: [] as ChecklistItem[],
+    assignee: null as { id: string; name: string; avatarUrl: string | null } | null,
+  };
 
   const io = req.app.get("io") as Server;
   io.to(list.boardId).emit("card:created", { card: cardWithLabels });
@@ -69,15 +76,16 @@ const updateCardSchema = z.object({
       message: "Data inválida",
     }),
   completed: z.boolean().optional(),
+  assigneeId: z.string().nullable().optional(),
 });
 
 /**
- * PATCH /cards/:id  { title?, description?, listId?, position?, dueDate?, completed? }
+ * PATCH /cards/:id  { title?, description?, listId?, position?, dueDate?, completed?, assigneeId? }
  * Dois modos, mutuamente exclusivos por enquanto:
  *  - listId + position juntos: move o card (reindexa a(s) lista(s) — ver
  *    seção 3 do spec, posições inteiras 0..n-1 sem gaps).
- *  - title, description, dueDate e/ou completed: edita o conteúdo, sem
- *    mexer em posição.
+ *  - title, description, dueDate, completed e/ou assigneeId: edita o
+ *    conteúdo, sem mexer em posição.
  */
 export async function updateCard(req: AuthRequest, res: Response) {
   const parsed = updateCardSchema.safeParse(req.body);
@@ -91,6 +99,7 @@ export async function updateCard(req: AuthRequest, res: Response) {
     position: toPosition,
     dueDate,
     completed,
+    assigneeId,
   } = parsed.data;
   const cardId = req.params.id;
 
@@ -103,8 +112,12 @@ export async function updateCard(req: AuthRequest, res: Response) {
   if (!sourceList) {
     return res.status(404).json({ error: "Lista não encontrada" });
   }
-  if (!(await isBoardMember(sourceList.boardId, req.userId!))) {
+  const membership = await getBoardMembership(sourceList.boardId, req.userId!);
+  if (!membership) {
     return res.status(403).json({ error: "Você não é membro deste board" });
+  }
+  if (!canEditCard(membership, card, req.userId!)) {
+    return res.status(403).json({ error: "Esse card está atribuído a outra pessoa" });
   }
 
   const io = req.app.get("io") as Server;
@@ -163,6 +176,7 @@ export async function updateCard(req: AuthRequest, res: Response) {
         include: {
           cardLabels: { select: { labelId: true } },
           checklistItems: { orderBy: { position: "asc" } },
+          assignee: { select: assigneeSelect },
         },
       });
     });
@@ -186,9 +200,16 @@ export async function updateCard(req: AuthRequest, res: Response) {
     title === undefined &&
     description === undefined &&
     dueDate === undefined &&
-    completed === undefined
+    completed === undefined &&
+    assigneeId === undefined
   ) {
     return res.status(400).json({ error: "Nada para atualizar" });
+  }
+
+  if (assigneeId !== undefined && assigneeId !== null) {
+    if (!(await isBoardMember(sourceList.boardId, assigneeId))) {
+      return res.status(400).json({ error: "Esse usuário não é membro do board" });
+    }
   }
 
   const updated = await prisma.card.update({
@@ -198,18 +219,26 @@ export async function updateCard(req: AuthRequest, res: Response) {
       ...(description !== undefined ? { description } : {}),
       ...(dueDate !== undefined ? { dueDate: dueDate === null ? null : new Date(dueDate) } : {}),
       ...(completed !== undefined ? { completed } : {}),
+      ...(assigneeId !== undefined ? { assigneeId } : {}),
     },
     include: {
       cardLabels: { select: { labelId: true } },
       checklistItems: { orderBy: { position: "asc" } },
+      assignee: { select: assigneeSelect },
     },
   });
   const cardWithLabels = withLabelIds(updated);
 
   io.to(sourceList.boardId).emit("card:updated", { card: cardWithLabels });
-  // Só o toggle de concluído vira entrada no histórico — editar título/
-  // descrição/prazo é mudança de conteúdo, não um evento de ciclo de vida.
-  if (completed !== undefined) {
+  // Só o toggle de concluído e mudar o responsável viram entrada no
+  // histórico — editar título/descrição/prazo é mudança de conteúdo, não
+  // um evento de ciclo de vida.
+  // Compara com o valor ANTES do update (`card`, buscado no começo da
+  // função), não só se o campo veio na requisição — clicar de novo no
+  // mesmo responsável (ou marcar/desmarcar clicando duas vezes rápido)
+  // manda o campo igual ao que já era, e isso não é uma mudança de
+  // verdade pro histórico.
+  if (completed !== undefined && completed !== card.completed) {
     await logActivity(
       io,
       sourceList.boardId,
@@ -217,6 +246,16 @@ export async function updateCard(req: AuthRequest, res: Response) {
       completed
         ? `marcou o card "${updated.title}" como concluído`
         : `reabriu o card "${updated.title}"`
+    );
+  }
+  if (assigneeId !== undefined && assigneeId !== card.assigneeId) {
+    await logActivity(
+      io,
+      sourceList.boardId,
+      req.userId,
+      assigneeId === null
+        ? `removeu a atribuição do card "${updated.title}"`
+        : `atribuiu o card "${updated.title}" a ${updated.assignee?.name}`
     );
   }
   return res.json({ card: cardWithLabels });
@@ -240,8 +279,12 @@ export async function deleteCard(req: AuthRequest, res: Response) {
   if (!list) {
     return res.status(404).json({ error: "Lista não encontrada" });
   }
-  if (!(await isBoardMember(list.boardId, req.userId!))) {
+  const membership = await getBoardMembership(list.boardId, req.userId!);
+  if (!membership) {
     return res.status(403).json({ error: "Você não é membro deste board" });
+  }
+  if (!canEditCard(membership, card, req.userId!)) {
+    return res.status(403).json({ error: "Esse card está atribuído a outra pessoa" });
   }
 
   // Precisa buscar os anexos ANTES da transação: onDelete: Cascade no

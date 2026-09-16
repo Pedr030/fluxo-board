@@ -6,6 +6,7 @@ import {
   ChecklistItem,
   Comment,
   Label,
+  Member,
   attachLabel as apiAttachLabel,
   createAttachment as apiCreateAttachment,
   createChecklistItem as apiCreateChecklistItem,
@@ -49,6 +50,8 @@ import { CalendarIcon, CameraIcon, CheckIcon, PlusIcon, TrashIcon, XIcon } from 
 export function CardDetailModal({
   card,
   labels,
+  members,
+  canEdit,
   boardId,
   open,
   onClose,
@@ -56,6 +59,8 @@ export function CardDetailModal({
 }: {
   card: CardData;
   labels: Label[];
+  members: Member[];
+  canEdit: boolean;
   boardId: string;
   open: boolean;
   onClose: () => void;
@@ -88,6 +93,8 @@ export function CardDetailModal({
   const [checklistError, setChecklistError] = useState<string | null>(null);
   const [dueDateError, setDueDateError] = useState<string | null>(null);
   const [completedError, setCompletedError] = useState<string | null>(null);
+  const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
+  const [assigneeError, setAssigneeError] = useState<string | null>(null);
   const newItemInputRef = useRef<HTMLInputElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -113,13 +120,15 @@ export function CardDetailModal({
         setLightboxUrl(null);
       } else if (labelPickerOpen) {
         setLabelPickerOpen(false);
+      } else if (assigneePickerOpen) {
+        setAssigneePickerOpen(false);
       } else {
         onClose();
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [open, onClose, lightboxUrl, labelPickerOpen]);
+  }, [open, onClose, lightboxUrl, labelPickerOpen, assigneePickerOpen]);
 
   useEffect(() => {
     if (!open) return;
@@ -290,6 +299,17 @@ export function CardDetailModal({
     }
   }
 
+  async function handleChangeAssignee(userId: string | null) {
+    setAssigneePickerOpen(false);
+    if (userId === (card.assignee?.id ?? null)) return;
+    setAssigneeError(null);
+    try {
+      await apiUpdateCard(card.id, { assigneeId: userId });
+    } catch {
+      setAssigneeError("Não foi possível atualizar o responsável.");
+    }
+  }
+
   async function handleDeleteLabel(labelId: string) {
     setLabelActionError(null);
     try {
@@ -376,8 +396,10 @@ export function CardDetailModal({
               ) : (
                 <h2
                   id="card-detail-title"
-                  onClick={() => setEditingTitle(true)}
-                  className="cursor-text font-display text-xl font-semibold text-ink"
+                  onClick={canEdit ? () => setEditingTitle(true) : undefined}
+                  className={`font-display text-xl font-semibold text-ink ${
+                    canEdit ? "cursor-text" : ""
+                  }`}
                 >
                   {card.title}
                 </h2>
@@ -385,15 +407,22 @@ export function CardDetailModal({
               {card.createdAt && (
                 <p className="text-xs text-ink-soft">Criado em {formatDate(card.createdAt)}</p>
               )}
+              {!canEdit && (
+                <p className="text-xs text-ink-soft">
+                  Esse card está atribuído a outra pessoa — você só edita os seus.
+                </p>
+              )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              <button
-                onClick={onDelete}
-                aria-label="Excluir card"
-                className="rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600"
-              >
-                <TrashIcon className="h-5 w-5" />
-              </button>
+              {canEdit && (
+                <button
+                  onClick={onDelete}
+                  aria-label="Excluir card"
+                  className="rounded-full p-1.5 text-ink-soft transition-colors hover:bg-red-500/10 hover:text-red-600"
+                >
+                  <TrashIcon className="h-5 w-5" />
+                </button>
+              )}
               <button
                 ref={closeRef}
                 onClick={onClose}
@@ -410,9 +439,10 @@ export function CardDetailModal({
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                disabled={!canEdit}
                 onClick={handleToggleCompleted}
                 aria-label={card.completed ? "Desmarcar como concluído" : "Marcar como concluído"}
-                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-card border transition-colors ${
+                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-card border transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                   card.completed
                     ? "border-flow-500 bg-flow-500 text-white"
                     : "border-surface-border text-transparent hover:border-brand-400"
@@ -422,8 +452,9 @@ export function CardDetailModal({
               </button>
               <button
                 type="button"
+                disabled={!canEdit}
                 onClick={handleToggleCompleted}
-                className={`text-sm font-medium transition-colors ${
+                className={`text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                   card.completed ? "text-flow-600 dark:text-flow-400" : "text-ink-soft hover:text-ink"
                 }`}
               >
@@ -431,6 +462,70 @@ export function CardDetailModal({
               </button>
             </div>
             {completedError && <p className="text-sm text-red-600 dark:text-red-400">{completedError}</p>}
+          </div>
+
+          <div className="relative flex flex-col gap-1.5">
+            <h3 className="text-sm font-medium text-ink-soft">Responsável</h3>
+            <button
+              type="button"
+              disabled={!canEdit}
+              onClick={() => setAssigneePickerOpen((v) => !v)}
+              className="flex w-fit items-center gap-2 rounded-card border border-surface-border bg-surface px-2 py-1.5 text-sm text-ink transition-colors hover:border-brand-400 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-surface-border"
+            >
+              {card.assignee ? (
+                <>
+                  <Avatar
+                    name={card.assignee.name}
+                    avatarUrl={card.assignee.avatarUrl}
+                    className="h-6 w-6 text-xs"
+                  />
+                  {card.assignee.name}
+                </>
+              ) : (
+                <span className="text-ink-soft">Ninguém atribuído</span>
+              )}
+            </button>
+            {assigneeError && <p className="text-sm text-red-600 dark:text-red-400">{assigneeError}</p>}
+
+            {assigneePickerOpen && (
+              <>
+                <div className="fixed inset-0 z-[65]" onClick={() => setAssigneePickerOpen(false)} />
+                <div
+                  className="absolute left-0 top-16 z-[66] w-64 rounded-card border border-surface-border bg-surface p-3 shadow-card"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <p className="mb-2 text-xs font-medium text-ink-soft">Membros do board</p>
+                  <div className="flex max-h-40 flex-col gap-1 overflow-y-auto">
+                    {members.map((m) => {
+                      const active = card.assignee?.id === m.user.id;
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => handleChangeAssignee(m.user.id)}
+                          className={`flex items-center gap-2 rounded-card px-2 py-1.5 text-left text-sm transition-colors ${
+                            active ? "bg-surface-border/50" : "hover:bg-surface-border/30"
+                          }`}
+                        >
+                          <Avatar name={m.user.name} avatarUrl={m.user.avatarUrl} className="h-6 w-6 text-xs" />
+                          <span className="flex-1 truncate text-ink">{m.user.name}</span>
+                          {active && <CheckIcon className="h-4 w-4 shrink-0 text-ink" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {card.assignee && (
+                    <button
+                      type="button"
+                      onClick={() => handleChangeAssignee(null)}
+                      className="mt-2 w-full rounded-card px-2 py-1.5 text-left text-sm text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-400"
+                    >
+                      Remover atribuição
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           <div className="relative flex flex-col gap-1.5">
@@ -525,12 +620,13 @@ export function CardDetailModal({
                 <input
                   type="date"
                   aria-label="Data de vencimento"
+                  disabled={!canEdit}
                   value={card.dueDate ? card.dueDate.slice(0, 10) : ""}
                   onChange={(e) => handleChangeDueDate(e.target.value)}
-                  className="bg-transparent outline-none [color-scheme:light] dark:[color-scheme:dark]"
+                  className="bg-transparent outline-none [color-scheme:light] dark:[color-scheme:dark] disabled:cursor-not-allowed disabled:opacity-60"
                 />
               </div>
-              {card.dueDate && (
+              {card.dueDate && canEdit && (
                 <button
                   type="button"
                   onClick={() => handleChangeDueDate("")}
@@ -564,10 +660,10 @@ export function CardDetailModal({
               />
             ) : (
               <p
-                onClick={() => setEditingDescription(true)}
-                className={`cursor-text whitespace-pre-wrap rounded-card border border-transparent p-3 text-sm transition-colors hover:border-surface-border hover:bg-surface-border/20 ${
-                  card.description ? "text-ink" : "text-ink-soft"
-                }`}
+                onClick={canEdit ? () => setEditingDescription(true) : undefined}
+                className={`whitespace-pre-wrap rounded-card border border-transparent p-3 text-sm transition-colors ${
+                  canEdit ? "cursor-text hover:border-surface-border hover:bg-surface-border/20" : ""
+                } ${card.description ? "text-ink" : "text-ink-soft"}`}
               >
                 {card.description || "Adicionar uma descrição mais detalhada..."}
               </p>

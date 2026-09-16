@@ -26,14 +26,17 @@ import {
   ChecklistItem,
   Label,
   Member,
+  Role,
   createList as apiCreateList,
   deleteLabel as apiDeleteLabel,
   getBoard,
+  getMe,
   inviteMember as apiInviteMember,
   listActivity,
   listMembers,
   moveCard as apiMoveCard,
   moveList as apiMoveList,
+  updateMember as apiUpdateMember,
 } from "@/lib/api";
 import { Avatar } from "./Avatar";
 import { CardData, CardView } from "./Card";
@@ -154,6 +157,9 @@ function LabelColumn({
   color,
   cards,
   labels,
+  members,
+  currentUserId,
+  restricted,
   boardId,
   emptyMessage,
   storageKey,
@@ -162,6 +168,9 @@ function LabelColumn({
   color?: string;
   cards: CardData[];
   labels: Label[];
+  members: Member[];
+  currentUserId: string | null;
+  restricted: boolean;
   boardId: string;
   emptyMessage: string;
   storageKey: string;
@@ -215,7 +224,15 @@ function LabelColumn({
       {!collapsed && (
         <div className="flex flex-col gap-3">
           {cards.map((card) => (
-            <CardTile key={card.id} card={card} labels={labels} boardId={boardId} />
+            <CardTile
+              key={card.id}
+              card={card}
+              labels={labels}
+              members={members}
+              currentUserId={currentUserId}
+              restricted={restricted}
+              boardId={boardId}
+            />
           ))}
           {cards.length === 0 && <p className="text-sm text-ink-soft">{emptyMessage}</p>}
         </div>
@@ -235,8 +252,11 @@ export function Board({ boardId }: { boardId: string }) {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteStatus, setInviteStatus] = useState<{ ok: boolean; message: string } | null>(null);
   const [inviting, setInviting] = useState(false);
-  const [myRole, setMyRole] = useState<"OWNER" | "MEMBER" | null>(null);
+  const [myRole, setMyRole] = useState<Role | null>(null);
+  const [myRestricted, setMyRestricted] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [memberActionError, setMemberActionError] = useState<string | null>(null);
   const [view, setView] = useState<"board" | "members" | "labels" | "activity">("board");
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -252,6 +272,10 @@ export function Board({ boardId }: { boardId: string }) {
   // no efeito principal (deps [boardId]) — um state aqui ficaria "preso"
   // no valor de quando o efeito rodou, sem ver a atualização.
   const activitiesLoadedRef = useRef(false);
+  // Mesmo motivo do activitiesLoadedRef acima: lido dentro do listener de
+  // socket (deps [boardId]), então precisa ser ref pra não ficar preso no
+  // valor (null) de quando o efeito montou, antes do getMe() resolver.
+  const currentUserIdRef = useRef<string | null>(null);
 
   function matchesStatusFilter(card: CardData) {
     if (statusFilter === "pending") return !card.completed;
@@ -274,12 +298,15 @@ export function Board({ boardId }: { boardId: string }) {
   function loadBoard() {
     setLoading(true);
     setLoadError(null);
-    Promise.all([getBoard(boardId), listMembers(boardId)])
-      .then(([{ board }, { members }]) => {
+    Promise.all([getBoard(boardId), listMembers(boardId), getMe()])
+      .then(([{ board }, { members }, { user }]) => {
         setLists(board.lists);
         setMyRole(board.myRole);
+        setMyRestricted(board.myRestricted);
         setMembers(members);
         setLabels(board.labels);
+        setCurrentUserId(user.id);
+        currentUserIdRef.current = user.id;
       })
       .catch((err) => {
         if (err instanceof ApiError && err.status === 403) {
@@ -458,6 +485,17 @@ export function Board({ boardId }: { boardId: string }) {
       );
     }
 
+    function handleMemberUpdated({ member }: { member: Member }) {
+      setMembers((prev) => prev.map((m) => (m.id === member.id ? member : m)));
+      // Se a mudança foi sobre mim mesmo (promovido/rebaixado, ou
+      // restringido/liberado), reflete na hora — sem isso eu continuaria
+      // vendo a UI do cargo antigo até recarregar a página.
+      if (member.user.id === currentUserIdRef.current) {
+        setMyRole(member.role);
+        setMyRestricted(member.restricted);
+      }
+    }
+
     function handleActivityCreated({ activity }: { activity: Activity }) {
       // Só prepende se a lista já tiver sido carregada (aba de Atividade
       // aberta ao menos uma vez) — senão fica um histórico incompleto até
@@ -485,6 +523,7 @@ export function Board({ boardId }: { boardId: string }) {
     socket.on("checklist-item:updated", handleChecklistItemUpdated);
     socket.on("checklist-item:deleted", handleChecklistItemDeleted);
     socket.on("activity:created", handleActivityCreated);
+    socket.on("member:updated", handleMemberUpdated);
 
     return () => {
       socket.emit("board:leave", boardId);
@@ -507,6 +546,7 @@ export function Board({ boardId }: { boardId: string }) {
       socket.off("checklist-item:updated", handleChecklistItemUpdated);
       socket.off("checklist-item:deleted", handleChecklistItemDeleted);
       socket.off("activity:created", handleActivityCreated);
+      socket.off("member:updated", handleMemberUpdated);
       setOnlineUsers([]);
     };
   }, [boardId]);
@@ -564,6 +604,24 @@ export function Board({ boardId }: { boardId: string }) {
       }
     } finally {
       setInviting(false);
+    }
+  }
+
+  async function handleChangeRole(member: Member, role: "ADMIN" | "MEMBER") {
+    setMemberActionError(null);
+    try {
+      await apiUpdateMember(boardId, member.id, { role });
+    } catch {
+      setMemberActionError("Não foi possível atualizar o cargo.");
+    }
+  }
+
+  async function handleToggleRestricted(member: Member) {
+    setMemberActionError(null);
+    try {
+      await apiUpdateMember(boardId, member.id, { restricted: !member.restricted });
+    } catch {
+      setMemberActionError("Não foi possível atualizar a restrição.");
     }
   }
 
@@ -795,29 +853,60 @@ export function Board({ boardId }: { boardId: string }) {
       ) : view === "members" ? (
         <div className="mx-auto w-full max-w-xl p-6">
           <ul className="flex flex-col gap-3">
-            {members.map((m) => (
-              <li
-                key={m.id}
-                className="flex items-center justify-between rounded-card border border-surface-border bg-surface p-4 text-base shadow-card"
-              >
-                <div>
-                  <p className="font-medium text-ink">{m.user.name}</p>
-                  <p className="text-sm text-ink-soft">{m.user.email}</p>
-                </div>
-                <span
-                  className={`rounded-card px-3 py-1 text-sm font-medium ${
-                    m.role === "OWNER"
-                      ? "bg-brand-100 text-brand-700 dark:bg-brand-500/20 dark:text-brand-300"
-                      : "bg-surface-muted text-ink-soft"
-                  }`}
+            {members.map((m) => {
+              const roleLabel = m.role === "OWNER" ? "Dono" : m.role === "ADMIN" ? "Admin" : "Membro";
+              const roleBadgeClass =
+                m.role === "OWNER"
+                  ? "bg-brand-100 text-brand-700 dark:bg-brand-500/20 dark:text-brand-300"
+                  : m.role === "ADMIN"
+                  ? "bg-flow-100 text-flow-700 dark:bg-flow-500/20 dark:text-flow-400"
+                  : "bg-surface-muted text-ink-soft";
+              return (
+                <li
+                  key={m.id}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-surface-border bg-surface p-4 text-base shadow-card"
                 >
-                  {m.role === "OWNER" ? "Dono" : "Membro"}
-                </span>
-              </li>
-            ))}
+                  <div className="min-w-0">
+                    <p className="font-medium text-ink">{m.user.name}</p>
+                    <p className="text-sm text-ink-soft">{m.user.email}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {m.restricted && (
+                      <span className="rounded-card bg-surface-border/50 px-2 py-1 text-xs font-medium text-ink-soft">
+                        Restrito aos próprios cards
+                      </span>
+                    )}
+                    <span className={`rounded-card px-3 py-1 text-sm font-medium ${roleBadgeClass}`}>
+                      {roleLabel}
+                    </span>
+                    {myRole === "OWNER" && m.role !== "OWNER" && (
+                      <>
+                        <button
+                          onClick={() => handleChangeRole(m, m.role === "ADMIN" ? "MEMBER" : "ADMIN")}
+                          className="rounded-card px-2 py-1 text-xs font-medium text-ink-soft underline-offset-2 transition-colors hover:text-ink hover:underline"
+                        >
+                          {m.role === "ADMIN" ? "Rebaixar a membro" : "Promover a admin"}
+                        </button>
+                        {m.role === "MEMBER" && (
+                          <button
+                            onClick={() => handleToggleRestricted(m)}
+                            className="rounded-card px-2 py-1 text-xs font-medium text-ink-soft underline-offset-2 transition-colors hover:text-ink hover:underline"
+                          >
+                            {m.restricted ? "Remover restrição" : "Restringir aos próprios cards"}
+                          </button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
+          {memberActionError && (
+            <p className="mt-2 text-sm text-red-600 dark:text-red-400">{memberActionError}</p>
+          )}
 
-          {myRole === "OWNER" && (
+          {(myRole === "OWNER" || myRole === "ADMIN") && (
             <form onSubmit={handleInvite} className="mt-5 flex gap-3">
               <input
                 type="email"
@@ -946,7 +1035,15 @@ export function Board({ boardId }: { boardId: string }) {
                         <span className="text-sm text-ink-soft">({cardsWithLabel.length})</span>
                       </div>
                       {cardsWithLabel.map((card) => (
-                        <CardTile key={card.id} card={card} labels={labels} boardId={boardId} />
+                        <CardTile
+                          key={card.id}
+                          card={card}
+                          labels={labels}
+                          members={members}
+                          currentUserId={currentUserId}
+                          restricted={myRestricted}
+                          boardId={boardId}
+                        />
                       ))}
                       {cardsWithLabel.length === 0 && (
                         <p className="text-sm text-ink-soft">Nenhum card com essa etiqueta.</p>
@@ -975,6 +1072,9 @@ export function Board({ boardId }: { boardId: string }) {
                       color={label.color}
                       cards={cardsWithLabel}
                       labels={labels}
+                      members={members}
+                      currentUserId={currentUserId}
+                      restricted={myRestricted}
                       boardId={boardId}
                       emptyMessage="Nenhum card com essa etiqueta."
                       storageKey={`fluxo_label_column_collapsed_${boardId}_${label.id}`}
@@ -992,6 +1092,9 @@ export function Board({ boardId }: { boardId: string }) {
                       title="Sem etiqueta"
                       cards={unlabeled}
                       labels={labels}
+                      members={members}
+                      currentUserId={currentUserId}
+                      restricted={myRestricted}
                       boardId={boardId}
                       emptyMessage="Nenhum card sem etiqueta."
                       storageKey={`fluxo_label_column_collapsed_${boardId}_unlabeled`}
@@ -1016,7 +1119,15 @@ export function Board({ boardId }: { boardId: string }) {
               strategy={horizontalListSortingStrategy}
             >
               {lists.map((list) => (
-                <List key={list.id} list={list} labels={labels} boardId={boardId} />
+                <List
+                  key={list.id}
+                  list={list}
+                  labels={labels}
+                  members={members}
+                  currentUserId={currentUserId}
+                  restricted={myRestricted}
+                  boardId={boardId}
+                />
               ))}
             </SortableContext>
 

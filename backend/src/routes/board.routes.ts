@@ -8,6 +8,7 @@ import {
   inviteMember,
   listBoards,
   listMembers,
+  updateMember,
 } from "../controllers/board.controller";
 import { createLabel } from "../controllers/label.controller";
 import { createList } from "../controllers/list.controller";
@@ -21,6 +22,7 @@ boardRouter.post("/", createBoard);
 boardRouter.get("/:id", getBoard);
 boardRouter.post("/:id/invite", inviteMember);
 boardRouter.get("/:id/members", listMembers);
+boardRouter.patch("/:id/members/:memberId", updateMember);
 boardRouter.get("/:id/activity", listActivity);
 boardRouter.post("/:id/lists", createList);
 boardRouter.post("/:id/labels", createLabel);

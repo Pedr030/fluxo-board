@@ -22,6 +22,7 @@ model User {
   memberships         BoardMember[]
   ownedBoards         Board[]       @relation("BoardOwner")
   cardsCreated        Card[]        @relation("CardCreator")
+  cardsAssigned       Card[]        @relation("CardAssignee")
   commentsWritten     Comment[]     @relation("CommentAuthor")
   attachmentsUploaded Attachment[]  @relation("AttachmentUploader")
   activities          Activity[]    @relation("ActivityActor")
@@ -42,6 +43,14 @@ model Board {
 
 enum Role {
   OWNER
+  // Tudo que MEMBER pode + convidar gente nova. Não é "mais confiável que
+  // MEMBER" em relação aos próprios cards — a restrição de "só edita os
+  // próprios cards" (campo `restricted` abaixo) é uma dimensão separada
+  // do cargo, não amarrada a ele. Só o OWNER promove/rebaixa ADMIN
+  // (ver updateMember em board.controller.ts) — a própria conta OWNER
+  // não muda de cargo por aqui (isso é a exclusão de conta com
+  // transferência de posse, um fluxo à parte).
+  ADMIN
   MEMBER
 }
 
@@ -50,6 +59,12 @@ model BoardMember {
   boardId String
   userId  String
   role    Role   @default(MEMBER)
+  // Quando true, essa pessoa só pode editar/mover/excluir cards que
+  // estejam atribuídos a ela (ou sem responsável nenhum — "livres pra
+  // pegar"). Não afeta comentar, checklist, etiquetas nem anexos, que
+  // continuam abertos pra qualquer membro. Só faz sentido em MEMBER —
+  // promover alguém a ADMIN limpa essa flag (ver updateMember).
+  restricted Boolean @default(false)
 
   board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
   // onDelete: Cascade aqui (e não em Board.owner) é proposital — excluir a
@@ -78,6 +93,7 @@ model Card {
   position    Int
   listId      String
   creatorId   String?
+  assigneeId  String?
   createdAt   DateTime  @default(now())
   dueDate     DateTime?
   completed   Boolean   @default(false)
@@ -85,8 +101,11 @@ model Card {
   list List @relation(fields: [listId], references: [id], onDelete: Cascade)
   // SetNull, não Cascade: excluir a conta de quem criou um card não deveria
   // apagar o card em si (que pode estar num board de outra pessoa) — só
-  // perde a atribuição de quem criou.
+  // perde a atribuição de quem criou. Mesma lógica pro responsável
+  // (assignee): a pessoa saiu, o card continua existindo, só fica sem
+  // responsável designado.
   creator        User?           @relation("CardCreator", fields: [creatorId], references: [id], onDelete: SetNull)
+  assignee       User?           @relation("CardAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
   comments       Comment[]
   attachments    Attachment[]
   cardLabels     CardLabel[]
