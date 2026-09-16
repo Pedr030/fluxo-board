@@ -3,6 +3,7 @@ import { Server } from "socket.io";
 import { z } from "zod";
 import { prisma } from "../prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
+import { logActivity } from "../lib/activity";
 import { isBoardMember } from "../lib/authorization";
 
 /**
@@ -173,6 +174,9 @@ export async function inviteMember(req: AuthRequest, res: Response) {
     data: { boardId, userId: invitedUser.id, role: "MEMBER" },
     include: { user: { select: { id: true, name: true, email: true, avatarUrl: true } } },
   });
+
+  const io = req.app.get("io") as Server;
+  await logActivity(io, boardId, req.userId, `convidou ${invitedUser.name} pro board`);
 
   return res.status(201).json({ member });
 }

@@ -4,6 +4,7 @@ import { Server } from "socket.io";
 import { z } from "zod";
 import { prisma } from "../prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
+import { logActivity } from "../lib/activity";
 import { isBoardMember } from "../lib/authorization";
 import { attachmentObjectKey, removeAttachment } from "../lib/supabaseStorage";
 
@@ -50,6 +51,7 @@ export async function createCard(req: AuthRequest, res: Response) {
 
   const io = req.app.get("io") as Server;
   io.to(list.boardId).emit("card:created", { card: cardWithLabels });
+  await logActivity(io, list.boardId, req.userId, `criou o card "${card.title}" na lista "${list.title}"`);
 
   return res.status(201).json({ card: cardWithLabels });
 }
@@ -167,6 +169,16 @@ export async function updateCard(req: AuthRequest, res: Response) {
     const cardWithLabels = withLabelIds(updated);
 
     io.to(destList.boardId).emit("card:moved", { card: cardWithLabels, fromListId, toListId });
+    // Só registra quando muda de lista — reordenar dentro da mesma lista
+    // é ruído demais pro histórico (aconteceria a cada arrasto pequeno).
+    if (fromListId !== toListId) {
+      await logActivity(
+        io,
+        destList.boardId,
+        req.userId,
+        `moveu o card "${updated.title}" de "${sourceList.title}" para "${destList.title}"`
+      );
+    }
     return res.json({ card: cardWithLabels });
   }
 
@@ -195,6 +207,18 @@ export async function updateCard(req: AuthRequest, res: Response) {
   const cardWithLabels = withLabelIds(updated);
 
   io.to(sourceList.boardId).emit("card:updated", { card: cardWithLabels });
+  // Só o toggle de concluído vira entrada no histórico — editar título/
+  // descrição/prazo é mudança de conteúdo, não um evento de ciclo de vida.
+  if (completed !== undefined) {
+    await logActivity(
+      io,
+      sourceList.boardId,
+      req.userId,
+      completed
+        ? `marcou o card "${updated.title}" como concluído`
+        : `reabriu o card "${updated.title}"`
+    );
+  }
   return res.json({ card: cardWithLabels });
 }
 
@@ -246,6 +270,7 @@ export async function deleteCard(req: AuthRequest, res: Response) {
 
   const io = req.app.get("io") as Server;
   io.to(list.boardId).emit("card:deleted", { cardId, listId: card.listId });
+  await logActivity(io, list.boardId, req.userId, `excluiu o card "${card.title}"`);
 
   return res.status(204).send();
 }

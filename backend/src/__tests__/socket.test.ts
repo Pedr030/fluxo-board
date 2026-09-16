@@ -420,4 +420,37 @@ describe("Socket.io: sincronização em tempo real", () => {
     const afterLeave = await onlyOneLeft;
     expect(afterLeave.users.map((u) => u.name)).toEqual(["a"]);
   });
+
+  it("activity:created chega em tempo real quando uma lista é criada", async () => {
+    const tokenA = await registerAndGetToken("a@teste.com");
+    const boardRes = await request(app)
+      .post("/boards")
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ title: "Board" });
+    const boardId = boardRes.body.board.id;
+
+    const tokenB = await registerAndGetToken("b@teste.com");
+    await request(app)
+      .post(`/boards/${boardId}/invite`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ email: "b@teste.com" });
+
+    const clientA = await connectClient(tokenA);
+    const clientB = await connectClient(tokenB);
+
+    clientA.emit("board:join", boardId);
+    clientB.emit("board:join", boardId);
+    await new Promise((r) => setTimeout(r, 150));
+
+    const eventPromise = waitForEvent(clientB, "activity:created");
+
+    await request(app)
+      .post(`/boards/${boardId}/lists`)
+      .set("Authorization", `Bearer ${tokenA}`)
+      .send({ title: "Lista ao vivo" });
+
+    const payload = await eventPromise;
+    expect(payload.activity.summary).toBe('criou a lista "Lista ao vivo"');
+    expect(payload.activity.user.name).toBe("a");
+  });
 });

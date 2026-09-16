@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.middleware";
+import { listActivity } from "../controllers/activity.controller";
 import {
   createBoard,
   deleteBoard,
@@ -20,6 +21,7 @@ boardRouter.post("/", createBoard);
 boardRouter.get("/:id", getBoard);
 boardRouter.post("/:id/invite", inviteMember);
 boardRouter.get("/:id/members", listMembers);
+boardRouter.get("/:id/activity", listActivity);
 boardRouter.post("/:id/lists", createList);
 boardRouter.post("/:id/labels", createLabel);
 boardRouter.delete("/:id", deleteBoard);

@@ -3,6 +3,7 @@ import { Server } from "socket.io";
 import { z } from "zod";
 import { prisma } from "../prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
+import { logActivity } from "../lib/activity";
 import { isBoardMember } from "../lib/authorization";
 
 const authorSelect = { id: true, name: true, avatarUrl: true };
@@ -70,6 +71,7 @@ export async function createComment(req: AuthRequest, res: Response) {
 
   const io = req.app.get("io") as Server;
   io.to(list.boardId).emit("comment:created", { comment, cardId });
+  await logActivity(io, list.boardId, req.userId, `comentou no card "${card.title}"`);
 
   return res.status(201).json({ comment });
 }

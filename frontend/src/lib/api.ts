@@ -187,6 +187,14 @@ export interface Member {
   user: User;
 }
 
+export interface Activity {
+  id: string;
+  boardId: string;
+  summary: string;
+  createdAt: string;
+  user: { id: string; name: string; avatarUrl: string | null } | null;
+}
+
 export const register = (name: string, email: string, password: string) =>
   apiFetch<{ user: User; token: string }>("/auth/register", {
     method: "POST",
@@ -264,6 +272,9 @@ export const inviteMember = (boardId: string, email: string) =>
 
 export const listMembers = (boardId: string) =>
   apiFetch<{ members: Member[] }>(`/boards/${boardId}/members`);
+
+export const listActivity = (boardId: string) =>
+  apiFetch<{ activities: Activity[] }>(`/boards/${boardId}/activity`);
 
 export const getMe = () => apiFetch<{ user: User }>("/me");
 

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DndContext,
   DragEndEvent,
@@ -21,6 +21,7 @@ import {
 } from "@dnd-kit/sortable";
 import { getSocket } from "@/lib/socket";
 import {
+  Activity,
   ApiError,
   ChecklistItem,
   Label,
@@ -29,6 +30,7 @@ import {
   deleteLabel as apiDeleteLabel,
   getBoard,
   inviteMember as apiInviteMember,
+  listActivity,
   listMembers,
   moveCard as apiMoveCard,
   moveList as apiMoveList,
@@ -58,6 +60,15 @@ interface PresenceUser {
 // Ciclo de cores da marca pros avatares de presença — ver docs/identidade-visual.html,
 // seção "Presença" (os três avatares de exemplo usam brand/flow/signal).
 const AVATAR_COLORS = ["bg-brand-500", "bg-flow-500", "bg-accent-500"];
+
+function formatActivityTime(iso: string): string {
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 function moveCardInLists(
   lists: ListData[],
@@ -226,7 +237,7 @@ export function Board({ boardId }: { boardId: string }) {
   const [inviting, setInviting] = useState(false);
   const [myRole, setMyRole] = useState<"OWNER" | "MEMBER" | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
-  const [view, setView] = useState<"board" | "members" | "labels">("board");
+  const [view, setView] = useState<"board" | "members" | "labels" | "activity">("board");
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
   const [labels, setLabels] = useState<Label[]>([]);
@@ -234,6 +245,13 @@ export function Board({ boardId }: { boardId: string }) {
   const [labelSidebarCollapsed, setLabelSidebarCollapsed] = useState(false);
   const [labelSidebarError, setLabelSidebarError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<"all" | "pending" | "completed">("all");
+  const [activities, setActivities] = useState<Activity[]>([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(false);
+  const [activitiesError, setActivitiesError] = useState<string | null>(null);
+  // Ref (não state) porque é lido dentro do listener de socket registrado
+  // no efeito principal (deps [boardId]) — um state aqui ficaria "preso"
+  // no valor de quando o efeito rodou, sem ver a atualização.
+  const activitiesLoadedRef = useRef(false);
 
   function matchesStatusFilter(card: CardData) {
     if (statusFilter === "pending") return !card.completed;
@@ -440,6 +458,14 @@ export function Board({ boardId }: { boardId: string }) {
       );
     }
 
+    function handleActivityCreated({ activity }: { activity: Activity }) {
+      // Só prepende se a lista já tiver sido carregada (aba de Atividade
+      // aberta ao menos uma vez) — senão fica um histórico incompleto até
+      // a próxima abertura buscar tudo via REST de qualquer forma.
+      if (!activitiesLoadedRef.current) return;
+      setActivities((prev) => [activity, ...prev]);
+    }
+
     socket.on("list:created", handleListCreated);
     socket.on("list:updated", handleListUpdated);
     socket.on("list:deleted", handleListDeleted);
@@ -458,6 +484,7 @@ export function Board({ boardId }: { boardId: string }) {
     socket.on("checklist-item:created", handleChecklistItemCreated);
     socket.on("checklist-item:updated", handleChecklistItemUpdated);
     socket.on("checklist-item:deleted", handleChecklistItemDeleted);
+    socket.on("activity:created", handleActivityCreated);
 
     return () => {
       socket.emit("board:leave", boardId);
@@ -479,9 +506,26 @@ export function Board({ boardId }: { boardId: string }) {
       socket.off("checklist-item:created", handleChecklistItemCreated);
       socket.off("checklist-item:updated", handleChecklistItemUpdated);
       socket.off("checklist-item:deleted", handleChecklistItemDeleted);
+      socket.off("activity:created", handleActivityCreated);
       setOnlineUsers([]);
     };
   }, [boardId]);
+
+  // Carrega o histórico só na primeira vez que a aba abre (mesma ideia de
+  // comentários/anexos no modal do card) — depois disso, activity:created
+  // (sempre escutado, ver efeito acima) mantém a lista atualizada sozinha.
+  useEffect(() => {
+    if (view !== "activity" || activitiesLoadedRef.current) return;
+    setActivitiesLoading(true);
+    setActivitiesError(null);
+    listActivity(boardId)
+      .then((res) => {
+        setActivities(res.activities);
+        activitiesLoadedRef.current = true;
+      })
+      .catch(() => setActivitiesError("Não foi possível carregar o histórico."))
+      .finally(() => setActivitiesLoading(false));
+  }, [view, boardId]);
 
   async function handleCreateList(e: React.FormEvent) {
     e.preventDefault();
@@ -696,6 +740,14 @@ export function Board({ boardId }: { boardId: string }) {
             >
               Membros ({members.length})
             </button>
+            <button
+              onClick={() => setView("activity")}
+              className={`rounded-card px-4 py-1.5 text-sm font-medium transition-colors ${
+                view === "activity" ? "bg-surface text-ink shadow-card" : "text-ink-soft"
+              }`}
+            >
+              Atividade
+            </button>
           </div>
 
           <ThemeToggle />
@@ -710,7 +762,37 @@ export function Board({ boardId }: { boardId: string }) {
         </div>
       </div>
 
-      {view === "members" ? (
+      {view === "activity" ? (
+        <div className="mx-auto w-full max-w-xl overflow-y-auto p-6">
+          {activitiesLoading && activities.length === 0 && (
+            <p className="text-sm text-ink-soft">Carregando...</p>
+          )}
+          {activitiesError && (
+            <p className="text-sm text-red-600 dark:text-red-400">{activitiesError}</p>
+          )}
+          {!activitiesLoading && !activitiesError && activities.length === 0 && (
+            <p className="text-sm text-ink-soft">Nenhuma atividade ainda.</p>
+          )}
+          <ul className="flex flex-col gap-3">
+            {activities.map((activity) => (
+              <li key={activity.id} className="flex items-start gap-3">
+                <Avatar
+                  name={activity.user?.name ?? "?"}
+                  avatarUrl={activity.user?.avatarUrl}
+                  className="h-8 w-8 shrink-0"
+                />
+                <div className="min-w-0 flex-1 rounded-card border border-surface-border bg-surface p-3 shadow-card">
+                  <p className="text-sm text-ink">
+                    <span className="font-medium">{activity.user?.name ?? "Usuário removido"}</span>{" "}
+                    {activity.summary}
+                  </p>
+                  <p className="mt-0.5 text-xs text-ink-soft">{formatActivityTime(activity.createdAt)}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : view === "members" ? (
         <div className="mx-auto w-full max-w-xl p-6">
           <ul className="flex flex-col gap-3">
             {members.map((m) => (

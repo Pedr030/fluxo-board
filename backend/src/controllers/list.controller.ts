@@ -3,6 +3,7 @@ import { Server } from "socket.io";
 import { z } from "zod";
 import { prisma } from "../prisma";
 import { AuthRequest } from "../middleware/auth.middleware";
+import { logActivity } from "../lib/activity";
 import { isBoardMember } from "../lib/authorization";
 
 const createListSchema = z.object({
@@ -36,6 +37,7 @@ export async function createList(req: AuthRequest, res: Response) {
   // (incluindo quem criou, pra todo cliente reagir do mesmo jeito ao evento).
   const io = req.app.get("io") as Server;
   io.to(boardId).emit("list:created", { list: listWithCards });
+  await logActivity(io, boardId, req.userId, `criou a lista "${list.title}"`);
 
   return res.status(201).json({ list: listWithCards });
 }
@@ -134,6 +136,7 @@ export async function deleteList(req: AuthRequest, res: Response) {
 
   const io = req.app.get("io") as Server;
   io.to(list.boardId).emit("list:deleted", { listId });
+  await logActivity(io, list.boardId, req.userId, `excluiu a lista "${list.title}"`);
 
   return res.status(204).send();
 }

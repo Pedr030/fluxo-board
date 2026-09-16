@@ -24,6 +24,7 @@ model User {
   cardsCreated        Card[]        @relation("CardCreator")
   commentsWritten     Comment[]     @relation("CommentAuthor")
   attachmentsUploaded Attachment[]  @relation("AttachmentUploader")
+  activities          Activity[]    @relation("ActivityActor")
 }
 
 model Board {
@@ -33,9 +34,10 @@ model Board {
   owner     User     @relation("BoardOwner", fields: [ownerId], references: [id])
   createdAt DateTime @default(now())
 
-  members BoardMember[]
-  lists   List[]
-  labels  Label[]
+  members    BoardMember[]
+  lists      List[]
+  labels     Label[]
+  activities Activity[]
 }
 
 enum Role {
@@ -164,4 +166,26 @@ model ChecklistItem {
   position Int
 
   card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+}
+
+// Histórico de atividade do board (quem fez o quê e quando). `summary` é
+// texto já pronto pra exibir ("criou o card \"X\" na lista \"Y\""), gerado
+// no controller no momento da ação — não guarda referência a Card/List
+// (só a boardId), de propósito: a atividade precisa continuar existindo
+// e fazendo sentido mesmo depois que o card/lista em questão for excluído,
+// então vira um "retrato" congelado, não uma junção viva. `userId` é
+// SetNull (mesmo padrão de Comment/Attachment) — perde a atribuição, não
+// a entrada em si, se a conta de quem fez for excluída. Nem toda mutação
+// gera entrada aqui — só eventos de ciclo de vida de alto sinal (criar/
+// mover/excluir card e lista, comentário, convite, concluir/reabrir),
+// senão o histórico vira ruído.
+model Activity {
+  id        String   @id @default(cuid())
+  boardId   String
+  userId    String?
+  summary   String
+  createdAt DateTime @default(now())
+
+  board Board @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  user  User? @relation("ActivityActor", fields: [userId], references: [id], onDelete: SetNull)
 }

@@ -72,6 +72,7 @@ Já implementado em `backend/prisma/schema.prisma`. Resumo:
 | `Label` | boardId, name, color | pertence a um `Board`, paleta compartilhada |
 | `CardLabel` | cardId, labelId | tabela de junção N:N Card↔Label |
 | `ChecklistItem` | cardId, text, done, position | pertence a um `Card` (um card, uma checklist só) |
+| `Activity` | boardId, userId, summary, createdAt | pertence a um `Board` — não referencia Card/List (é um retrato congelado, não uma junção viva) |
 
 **Sobre `position` (ordenação de listas e cards):** a forma mais simples é
 usar inteiros e reindexar (0, 1, 2, ...) sempre que a ordem mudar dentro de
@@ -112,10 +113,11 @@ Todas as rotas abaixo (exceto `/auth/*`) exigem header
 | POST | `/cards/:id/checklist-items` | cria item da checklist `{ text }` |
 | PATCH | `/checklist-items/:id` | edita texto e/ou marca/desmarca `{ text?, done? }` |
 | DELETE | `/checklist-items/:id` | remove item (reindexa os restantes) |
+| GET | `/boards/:id/activity` | histórico de atividade do board, mais recente primeiro (últimas 100) |
 
 `GET /boards/:id` já devolve `labels` (paleta do board inteiro) e cada
 card vem com `labelIds` e `checklistItems` — pequeno o bastante pra não
-precisar de rota separada, ao contrário de comentários/anexos.
+precisar de rota separada, ao contrário de comentários/anexos/atividade.
 
 ## 5. Eventos de socket
 
@@ -144,6 +146,7 @@ com `board:leave` ao desmontar a página.
 | `checklist-item:created` | `{ item, cardId }` | `POST /cards/:id/checklist-items` |
 | `checklist-item:updated` | `{ item, cardId }` | `PATCH /checklist-items/:id` |
 | `checklist-item:deleted` | `{ itemId, cardId }` | `DELETE /checklist-items/:id` |
+| `activity:created` | `{ activity }` | qualquer ação de alto sinal (ver seção 3, model `Activity`) |
 
 Stub em `backend/src/sockets/boardSocket.ts` — os handlers de `join`/`leave`
 já existem, os eventos de mutação você adiciona junto com cada rota REST
@@ -185,7 +188,7 @@ pra próxima, o que ajuda demais quando você tá pareando com o Claude Code
 - ~~Testes automatizados~~ — feito (Jest no backend, incluindo testes de
   socket com dois clientes provando a sincronização em tempo real)
 - ~~CI (GitHub Actions rodando lint + testes a cada push)~~ — feito
-- Histórico de atividade do board (quem fez o quê e quando)
+- ~~Histórico de atividade do board (quem fez o quê e quando)~~ — feito
 - ~~Checklist dentro do card~~ — feito
 - ~~Data de vencimento (due date) no card~~ — feito
 
