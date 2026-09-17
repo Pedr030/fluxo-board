@@ -401,3 +401,138 @@ describe("Lists: editar e excluir", () => {
     expect(board.lists[0].id).toBe(listA);
   });
 });
+
+describe("Cards: duplicar (POST /cards/:id/duplicate)", () => {
+  it("cria a cópia logo depois do original, na mesma lista, reindexando quem vem depois", async () => {
+    const token = await registerUser("dona@teste.com");
+    const boardId = await createBoard(token);
+    const listId = await createList(token, boardId, "Lista");
+    const cardId = await createCard(token, listId, "Original");
+    await createCard(token, listId, "Depois"); // position 1
+
+    const dup = await request(app)
+      .post(`/cards/${cardId}/duplicate`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(dup.status).toBe(201);
+    expect(dup.body.card.title).toBe("Original (cópia)");
+
+    const board = await getBoard(token, boardId);
+    const cards = board.lists[0].cards;
+    expect(cards.map((c) => c.title)).toEqual(["Original", "Original (cópia)", "Depois"]);
+    expect(cards.map((c) => c.position)).toEqual([0, 1, 2]);
+  });
+
+  it("copia descrição e etiquetas, mas não responsável/prazo/conclusão", async () => {
+    const token = await registerUser("dona@teste.com");
+    const boardId = await createBoard(token);
+    const listId = await createList(token, boardId, "Lista");
+    const cardId = await createCard(token, listId, "Original");
+
+    const label = await request(app)
+      .post(`/boards/${boardId}/labels`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "Urgente", color: "#ef4444" });
+    const labelId = label.body.label.id as string;
+    await request(app)
+      .post(`/cards/${cardId}/labels`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ labelId });
+    await request(app)
+      .patch(`/cards/${cardId}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        description: "Instruções do modelo",
+        dueDate: "2026-12-25T00:00:00.000Z",
+        completed: true,
+      });
+
+    const dup = await request(app)
+      .post(`/cards/${cardId}/duplicate`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(dup.body.card.description).toBe("Instruções do modelo");
+    expect(dup.body.card.labelIds).toEqual([labelId]);
+    expect(dup.body.card.dueDate).toBeNull();
+    expect(dup.body.card.completed).toBe(false);
+    expect(dup.body.card.assignee).toBeNull();
+  });
+
+  it("copia a checklist com os itens desmarcados, mesmo se o original tinha item feito", async () => {
+    const token = await registerUser("dona@teste.com");
+    const boardId = await createBoard(token);
+    const listId = await createList(token, boardId, "Lista");
+    const cardId = await createCard(token, listId, "Original");
+
+    const item = await request(app)
+      .post(`/cards/${cardId}/checklist-items`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ text: "Passo 1" });
+    await request(app)
+      .patch(`/checklist-items/${item.body.item.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ done: true });
+
+    const dup = await request(app)
+      .post(`/cards/${cardId}/duplicate`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(dup.body.card.checklistItems).toHaveLength(1);
+    expect(dup.body.card.checklistItems[0]).toMatchObject({ text: "Passo 1", done: false });
+  });
+
+  it("membro restrito pode duplicar card atribuído a outra pessoa (mesma regra de criar card)", async () => {
+    const tokenOwner = await registerUser("dona@teste.com");
+    const tokenMember = await registerUser("membro@teste.com");
+    const boardId = await createBoard(tokenOwner);
+    await request(app)
+      .post(`/boards/${boardId}/invite`)
+      .set("Authorization", `Bearer ${tokenOwner}`)
+      .send({ email: "membro@teste.com" });
+    const membersRes = await request(app)
+      .get(`/boards/${boardId}/members`)
+      .set("Authorization", `Bearer ${tokenOwner}`);
+    const memberRow = membersRes.body.members.find((m: { user: { email: string } }) => m.user.email === "membro@teste.com");
+    await request(app)
+      .patch(`/boards/${boardId}/members/${memberRow.id}`)
+      .set("Authorization", `Bearer ${tokenOwner}`)
+      .send({ restricted: true });
+
+    const listId = await createList(tokenOwner, boardId, "Lista");
+    const cardId = await createCard(tokenOwner, listId, "Card da dona");
+
+    const dup = await request(app)
+      .post(`/cards/${cardId}/duplicate`)
+      .set("Authorization", `Bearer ${tokenMember}`);
+    expect(dup.status).toBe(201);
+  });
+
+  it("registra a duplicação no histórico de atividade", async () => {
+    const token = await registerUser("dona@teste.com");
+    const boardId = await createBoard(token);
+    const listId = await createList(token, boardId, "Lista");
+    const cardId = await createCard(token, listId, "Original");
+
+    await request(app).post(`/cards/${cardId}/duplicate`).set("Authorization", `Bearer ${token}`);
+
+    const activity = await request(app)
+      .get(`/boards/${boardId}/activity`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(activity.body.activities[0].summary).toBe('duplicou o card "Original"');
+  });
+
+  it("card inexistente devolve 404, e quem não é membro do board não pode duplicar", async () => {
+    const token = await registerUser("dona@teste.com");
+    const outsider = await registerUser("de-fora@teste.com");
+    const boardId = await createBoard(token);
+    const listId = await createList(token, boardId, "Lista");
+    const cardId = await createCard(token, listId, "Original");
+
+    const notFound = await request(app)
+      .post(`/cards/fantasma/duplicate`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(notFound.status).toBe(404);
+
+    const forbidden = await request(app)
+      .post(`/cards/${cardId}/duplicate`)
+      .set("Authorization", `Bearer ${outsider}`);
+    expect(forbidden.status).toBe(403);
+  });
+});

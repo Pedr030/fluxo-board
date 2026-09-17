@@ -66,6 +66,13 @@ idempotente.
   visual quando concluído
 - Comentários (só o autor exclui) e anexos de imagem (Supabase Storage, com
   visualização em lightbox; só quem enviou exclui)
+- Duplicar card (copia título/descrição/etiquetas/checklist desmarcada)
+  logo depois do original, na mesma lista
+- Modelos de card, numa aba própria: guarda título/descrição/etiquetas/
+  checklist prontos, sem os campos que não fazem sentido num modelo
+  (responsável, prazo, anexos, comentários); ao criar um card em qualquer
+  lista, dá pra escolher um modelo pronto ou criar em branco — nos dois
+  casos já abre o painel de edição na hora
 
 **Board**
 - **Histórico de atividade** em tempo real, paginado: quem fez o quê e

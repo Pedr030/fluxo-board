@@ -29,6 +29,8 @@ import {
   Member,
   Role,
   createList as apiCreateList,
+  createTemplate as apiCreateTemplate,
+  deleteCard as apiDeleteCard,
   deleteLabel as apiDeleteLabel,
   getBoard,
   getMe,
@@ -43,9 +45,12 @@ import {
 import { Avatar } from "./Avatar";
 import { CardData, CardView } from "./Card";
 import { CardTile } from "./CardTile";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { CreateLabelForm } from "./CreateLabelForm";
 import { ArrowLeftIcon, SidebarIcon, TrashIcon, UserIcon } from "./icons";
 import { List, ListData } from "./List";
+import { TemplateDetailModal } from "./TemplateDetailModal";
+import { TemplateTile } from "./TemplateTile";
 import { ThemeToggle } from "./ThemeToggle";
 
 /**
@@ -227,11 +232,7 @@ function LabelColumn({
   }
 
   return (
-    <div
-      className={`flex w-80 shrink-0 flex-col gap-3 rounded-list border border-surface-border bg-surface/70 p-4 ${
-        collapsed ? "self-start" : ""
-      }`}
-    >
+    <div className="flex w-80 shrink-0 flex-col gap-3 rounded-list border border-surface-border bg-surface/70 p-4">
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           {color && <span style={{ backgroundColor: color }} className="h-3 w-3 shrink-0 rounded-full" />}
@@ -285,7 +286,21 @@ export function Board({ boardId }: { boardId: string }) {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [memberActionError, setMemberActionError] = useState<string | null>(null);
-  const [view, setView] = useState<"board" | "members" | "labels" | "activity">("board");
+  const [view, setView] = useState<"board" | "members" | "labels" | "activity" | "templates">(
+    "board"
+  );
+  const [creatingTemplate, setCreatingTemplate] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  // Modelo recém-criado: abre o TemplateDetailModal na hora (mesmo padrão
+  // do "criar card em branco" em List.tsx) em vez de pedir o nome numa
+  // janelinha separada — aqui nem faz sentido ter esse passo intermediário,
+  // já que não existe "criar modelo a partir de outro modelo".
+  const [justCreatedTemplate, setJustCreatedTemplate] = useState<CardData | null>(null);
+  const [deleteJustCreatedTemplateOpen, setDeleteJustCreatedTemplateOpen] = useState(false);
+  const [deletingJustCreatedTemplate, setDeletingJustCreatedTemplate] = useState(false);
+  const [deleteJustCreatedTemplateError, setDeleteJustCreatedTemplateError] = useState<
+    string | null
+  >(null);
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
   const [labels, setLabels] = useState<Label[]>([]);
@@ -370,11 +385,21 @@ export function Board({ boardId }: { boardId: string }) {
       setLists((prev) => [...prev, list]);
     }
 
-    function handleCardCreated({ card }: { card: CardData & { listId: string } }) {
+    // Insere na posição informada (não só empilha no fim): criar card
+    // sempre nasce no fim da lista (position === cards.length, então dá
+    // no mesmo), mas duplicar nasce logo depois do original, no meio.
+    function handleCardCreated({
+      card,
+    }: {
+      card: CardData & { listId: string; position: number };
+    }) {
       setLists((prev) =>
-        prev.map((list) =>
-          list.id === card.listId ? { ...list, cards: [...list.cards, card] } : list
-        )
+        prev.map((list) => {
+          if (list.id !== card.listId) return list;
+          const cards = [...list.cards];
+          cards.splice(Math.min(card.position, cards.length), 0, card);
+          return { ...list, cards };
+        })
       );
     }
 
@@ -644,6 +669,34 @@ export function Board({ boardId }: { boardId: string }) {
     }
   }
 
+  async function handleCreateTemplate() {
+    setCreatingTemplate(true);
+    setTemplateError(null);
+    try {
+      const { card } = await apiCreateTemplate(boardId, "Novo modelo");
+      setJustCreatedTemplate(card);
+    } catch {
+      setTemplateError("Não foi possível criar o modelo. Tente de novo.");
+    } finally {
+      setCreatingTemplate(false);
+    }
+  }
+
+  async function handleDeleteJustCreatedTemplate() {
+    if (!justCreatedTemplate) return;
+    setDeleteJustCreatedTemplateError(null);
+    setDeletingJustCreatedTemplate(true);
+    try {
+      await apiDeleteCard(justCreatedTemplate.id);
+      setDeleteJustCreatedTemplateOpen(false);
+      setJustCreatedTemplate(null);
+    } catch {
+      setDeleteJustCreatedTemplateError("Não foi possível excluir o modelo.");
+    } finally {
+      setDeletingJustCreatedTemplate(false);
+    }
+  }
+
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
@@ -797,6 +850,14 @@ export function Board({ boardId }: { boardId: string }) {
     );
   }
 
+  // A lista de modelos (ver PROJECT_SPEC.md, seção 4 — `isTemplatesList`)
+  // nunca aparece no Quadro nem na aba "Por etiqueta": `boardLists` é o que
+  // as duas usam pra renderizar. `templates` alimenta a aba "Modelos" e o
+  // seletor "criar a partir de um modelo" em cada lista.
+  const boardLists = lists.filter((l) => !l.isTemplatesList);
+  const templatesList = lists.find((l) => l.isTemplatesList);
+  const templates = templatesList?.cards ?? [];
+
   return (
     <div className="flex h-screen flex-col bg-surface-muted">
       {actionError && (
@@ -867,6 +928,14 @@ export function Board({ boardId }: { boardId: string }) {
               }`}
             >
               Atividade
+            </button>
+            <button
+              onClick={() => setView("templates")}
+              className={`rounded-card px-4 py-1.5 text-sm font-medium transition-colors ${
+                view === "templates" ? "bg-surface text-ink shadow-card" : "text-ink-soft"
+              }`}
+            >
+              Modelos
             </button>
           </div>
 
@@ -960,6 +1029,50 @@ export function Board({ boardId }: { boardId: string }) {
                 ›
               </button>
             </nav>
+          )}
+        </div>
+      ) : view === "templates" ? (
+        <div className="mx-auto w-full max-w-xl overflow-y-auto p-6">
+          <p className="mb-3 text-sm text-ink-soft">
+            Modelos guardam título, descrição, etiquetas e checklist prontos — use &ldquo;criar a
+            partir de um modelo&rdquo; ao adicionar um card em qualquer lista, ou duplique um
+            modelo aqui pra ajustar antes.
+          </p>
+          <button
+            type="button"
+            onClick={handleCreateTemplate}
+            disabled={creatingTemplate}
+            className="mb-4 rounded-card p-1.5 text-sm font-medium text-brand-500 transition-colors hover:bg-brand-50 disabled:opacity-60 dark:hover:bg-brand-500/10"
+          >
+            {creatingTemplate ? "Criando..." : "+ Adicionar modelo"}
+          </button>
+          {templateError && <p className="mb-3 text-xs text-red-600 dark:text-red-400">{templateError}</p>}
+          <div className="flex flex-col gap-3">
+            {templates.map((template) => (
+              <TemplateTile key={template.id} template={template} labels={labels} boardId={boardId} />
+            ))}
+            {templates.length === 0 && (
+              <p className="text-sm text-ink-soft">Nenhum modelo ainda.</p>
+            )}
+          </div>
+          <ConfirmDialog
+            open={deleteJustCreatedTemplateOpen}
+            title="Excluir este modelo?"
+            description="Essa ação não pode ser desfeita."
+            pending={deletingJustCreatedTemplate}
+            error={deleteJustCreatedTemplateError}
+            onConfirm={handleDeleteJustCreatedTemplate}
+            onCancel={() => setDeleteJustCreatedTemplateOpen(false)}
+          />
+          {justCreatedTemplate && (
+            <TemplateDetailModal
+              template={templates.find((t) => t.id === justCreatedTemplate.id) ?? justCreatedTemplate}
+              labels={labels}
+              boardId={boardId}
+              open={justCreatedTemplate !== null}
+              onClose={() => setJustCreatedTemplate(null)}
+              onDelete={() => setDeleteJustCreatedTemplateOpen(true)}
+            />
           )}
         </div>
       ) : view === "members" ? (
@@ -1073,7 +1186,7 @@ export function Board({ boardId }: { boardId: string }) {
             </button>
             <div className="flex flex-col gap-1">
               {labels.map((label) => {
-                const count = lists.flatMap((l) => l.cards).filter((c) => c.labelIds.includes(label.id)).length;
+                const count = boardLists.flatMap((l) => l.cards).filter((c) => c.labelIds.includes(label.id)).length;
                 const active = labelFilterId === label.id;
                 return (
                   <div key={label.id} className="group flex items-center gap-1">
@@ -1124,7 +1237,7 @@ export function Board({ boardId }: { boardId: string }) {
             {labelFilterId ? (
               (() => {
                 const label = labels.find((l) => l.id === labelFilterId);
-                const cardsWithLabel = lists
+                const cardsWithLabel = boardLists
                   .flatMap((l) => l.cards)
                   .filter((c) => c.labelIds.includes(labelFilterId))
                   .filter(matchesStatusFilter);
@@ -1171,9 +1284,9 @@ export function Board({ boardId }: { boardId: string }) {
                 }`}
               >
                 <StatusFilterBar value={statusFilter} onChange={setStatusFilter} />
-                <div className="flex flex-1 gap-5 overflow-x-auto">
+                <div className="flex flex-1 items-start gap-5 overflow-x-auto">
                 {labels.map((label) => {
-                  const cardsWithLabel = lists
+                  const cardsWithLabel = boardLists
                     .flatMap((l) => l.cards)
                     .filter((c) => c.labelIds.includes(label.id))
                     .filter(matchesStatusFilter);
@@ -1195,7 +1308,7 @@ export function Board({ boardId }: { boardId: string }) {
                 })}
 
                 {(() => {
-                  const unlabeled = lists
+                  const unlabeled = boardLists
                     .flatMap((l) => l.cards)
                     .filter((c) => c.labelIds.length === 0)
                     .filter(matchesStatusFilter);
@@ -1225,12 +1338,12 @@ export function Board({ boardId }: { boardId: string }) {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <main className="flex flex-1 gap-5 overflow-x-auto p-6">
+          <main className="flex flex-1 items-start gap-5 overflow-x-auto p-6">
             <SortableContext
-              items={lists.map((l) => `list-${l.id}`)}
+              items={boardLists.map((l) => `list-${l.id}`)}
               strategy={horizontalListSortingStrategy}
             >
-              {lists.map((list) => (
+              {boardLists.map((list) => (
                 <List
                   key={list.id}
                   list={list}
@@ -1239,6 +1352,7 @@ export function Board({ boardId }: { boardId: string }) {
                   currentUserId={currentUserId}
                   restricted={myRestricted}
                   boardId={boardId}
+                  templates={templates}
                 />
               ))}
             </SortableContext>

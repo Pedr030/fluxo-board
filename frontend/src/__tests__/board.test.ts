@@ -15,7 +15,7 @@ function card(id: string): CardData {
 }
 
 function list(id: string, cardIds: string[]): ListData {
-  return { id, title: id, cards: cardIds.map(card) };
+  return { id, title: id, cards: cardIds.map(card), isTemplatesList: false };
 }
 
 describe("moveCardInLists", () => {

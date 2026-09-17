@@ -10,6 +10,7 @@ import {
   listMembers,
   updateMember,
 } from "../controllers/board.controller";
+import { createTemplate } from "../controllers/card.controller";
 import { createLabel } from "../controllers/label.controller";
 import { createList } from "../controllers/list.controller";
 
@@ -26,4 +27,5 @@ boardRouter.patch("/:id/members/:memberId", updateMember);
 boardRouter.get("/:id/activity", listActivity);
 boardRouter.post("/:id/lists", createList);
 boardRouter.post("/:id/labels", createLabel);
+boardRouter.post("/:id/templates", createTemplate);
 boardRouter.delete("/:id", deleteBoard);

@@ -200,6 +200,7 @@ export interface ListItem {
   id: string;
   title: string;
   position: number;
+  isTemplatesList: boolean;
   cards: CardItem[];
 }
 
@@ -282,6 +283,18 @@ export const createCard = (listId: string, title: string) =>
     body: JSON.stringify({ title }),
   });
 
+export const createCardFromTemplate = (listId: string, templateId: string) =>
+  apiFetch<{ card: CardItem }>(`/lists/${listId}/cards`, {
+    method: "POST",
+    body: JSON.stringify({ fromTemplateId: templateId }),
+  });
+
+export const createTemplate = (boardId: string, title: string) =>
+  apiFetch<{ card: CardItem }>(`/boards/${boardId}/templates`, {
+    method: "POST",
+    body: JSON.stringify({ title }),
+  });
+
 export const moveCard = (cardId: string, listId: string, position: number) =>
   apiFetch<{ card: CardItem }>(`/cards/${cardId}`, {
     method: "PATCH",
@@ -305,6 +318,9 @@ export const updateCard = (
 
 export const deleteCard = (cardId: string) =>
   apiFetch<void>(`/cards/${cardId}`, { method: "DELETE" });
+
+export const duplicateCard = (cardId: string) =>
+  apiFetch<{ card: CardItem }>(`/cards/${cardId}/duplicate`, { method: "POST" });
 
 export const inviteMember = (boardId: string, email: string) =>
   apiFetch<{ member: Member }>(`/boards/${boardId}/invite`, {

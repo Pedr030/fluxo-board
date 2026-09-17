@@ -16,6 +16,7 @@ import {
   deleteComment as apiDeleteComment,
   deleteLabel as apiDeleteLabel,
   detachLabel as apiDetachLabel,
+  duplicateCard as apiDuplicateCard,
   getMe,
   listAttachments,
   listComments,
@@ -26,7 +27,7 @@ import { getSocket } from "@/lib/socket";
 import { Avatar } from "./Avatar";
 import { CardData, isCardOverdue } from "./Card";
 import { CreateLabelForm } from "./CreateLabelForm";
-import { CalendarIcon, CameraIcon, CheckIcon, PlusIcon, TrashIcon, XIcon } from "./icons";
+import { CalendarIcon, CameraIcon, CheckIcon, CopyIcon, PlusIcon, TrashIcon, XIcon } from "./icons";
 
 /**
  * Painel de detalhes do card (estilo Trello: clicar no card abre isso em
@@ -95,6 +96,8 @@ export function CardDetailModal({
   const [completedError, setCompletedError] = useState<string | null>(null);
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
   const [assigneeError, setAssigneeError] = useState<string | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
   const newItemInputRef = useRef<HTMLInputElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -203,6 +206,22 @@ export function CardDetailModal({
     } catch {
       setTitleDraft(card.title);
       setTitleError("Não foi possível salvar o título.");
+    }
+  }
+
+  // Fecha o modal depois de duplicar (a cópia chega pra tela via
+  // "card:created", igual toda criação de card) — a pessoa clica na cópia
+  // se quiser abrir/editar ela em seguida.
+  async function handleDuplicate() {
+    setDuplicating(true);
+    setDuplicateError(null);
+    try {
+      await apiDuplicateCard(card.id);
+      onClose();
+    } catch {
+      setDuplicateError("Não foi possível duplicar o card.");
+    } finally {
+      setDuplicating(false);
     }
   }
 
@@ -414,6 +433,15 @@ export function CardDetailModal({
               )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
+              <button
+                onClick={handleDuplicate}
+                disabled={duplicating}
+                aria-label="Duplicar card"
+                title="Duplicar card"
+                className="rounded-full p-1.5 text-ink-soft transition-colors hover:bg-surface-border/50 hover:text-ink disabled:opacity-60"
+              >
+                <CopyIcon className="h-5 w-5" />
+              </button>
               {canEdit && (
                 <button
                   onClick={onDelete}
@@ -434,6 +462,9 @@ export function CardDetailModal({
             </div>
           </div>
           {titleError && <p className="text-sm text-red-600 dark:text-red-400">{titleError}</p>}
+          {duplicateError && (
+            <p className="text-sm text-red-600 dark:text-red-400">{duplicateError}</p>
+          )}
 
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-2">

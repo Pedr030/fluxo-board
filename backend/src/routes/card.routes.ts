@@ -3,7 +3,7 @@ import { requireAuth } from "../middleware/auth.middleware";
 import { createImageUploadMiddleware } from "../middleware/imageUpload";
 import { sensitiveActionLimiter } from "../middleware/rateLimit";
 import { createAttachment, listAttachments } from "../controllers/attachment.controller";
-import { deleteCard, updateCard } from "../controllers/card.controller";
+import { deleteCard, duplicateCard, updateCard } from "../controllers/card.controller";
 import { createChecklistItem } from "../controllers/checklistItem.controller";
 import { createComment, listComments } from "../controllers/comment.controller";
 import { attachLabel, detachLabel } from "../controllers/label.controller";
@@ -16,6 +16,7 @@ cardRouter.use(requireAuth);
 
 cardRouter.patch("/:id", updateCard);
 cardRouter.delete("/:id", deleteCard);
+cardRouter.post("/:id/duplicate", duplicateCard);
 cardRouter.get("/:id/comments", listComments);
 cardRouter.post("/:id/comments", createComment);
 cardRouter.get("/:id/attachments", listAttachments);

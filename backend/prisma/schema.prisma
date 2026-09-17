@@ -77,6 +77,14 @@ model List {
   title    String
   position Int
   boardId  String
+  // Marca a lista especial (no máximo uma por board, criada sob demanda na
+  // primeira vez que alguém salva um modelo) que guarda os cards-modelo da
+  // aba "Modelos" — não aparece no Quadro nem na aba "Por etiqueta", e fica
+  // de fora da reindexação de position das listas normais (ver
+  // list.controller.ts: createList/updateList/deleteList excluem essa
+  // lista das contas e do reindex, pra não desalinhar a sequência 0..n-1
+  // das listas de verdade). Position dela é só um valor fixo, nunca lido.
+  isTemplatesList Boolean @default(false)
 
   board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
   cards Card[]
