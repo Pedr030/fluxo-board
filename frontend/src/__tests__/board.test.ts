@@ -10,12 +10,12 @@ function card(id: string): CardData {
     completed: false,
     labelIds: [],
     checklistItems: [],
-    assignee: null,
+    assigneeIds: [],
   };
 }
 
 function list(id: string, cardIds: string[]): ListData {
-  return { id, title: id, cards: cardIds.map(card) };
+  return { id, title: id, cards: cardIds.map(card), isTemplatesList: false };
 }
 
 describe("moveCardInLists", () => {

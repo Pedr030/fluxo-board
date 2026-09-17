@@ -16,12 +16,12 @@ model User {
   createdAt DateTime @default(now())
 
   memberships         BoardMember[]
-  ownedBoards         Board[]       @relation("BoardOwner")
-  cardsCreated        Card[]        @relation("CardCreator")
-  cardsAssigned       Card[]        @relation("CardAssignee")
-  commentsWritten     Comment[]     @relation("CommentAuthor")
-  attachmentsUploaded Attachment[]  @relation("AttachmentUploader")
-  activities          Activity[]    @relation("ActivityActor")
+  ownedBoards         Board[]        @relation("BoardOwner")
+  cardsCreated        Card[]         @relation("CardCreator")
+  cardAssignments     CardAssignee[]
+  commentsWritten     Comment[]      @relation("CommentAuthor")
+  attachmentsUploaded Attachment[]   @relation("AttachmentUploader")
+  activities          Activity[]     @relation("ActivityActor")
 }
 
 model Board {
@@ -77,6 +77,14 @@ model List {
   title    String
   position Int
   boardId  String
+  // Marca a lista especial (no máximo uma por board, criada sob demanda na
+  // primeira vez que alguém salva um modelo) que guarda os cards-modelo da
+  // aba "Modelos" — não aparece no Quadro nem na aba "Por etiqueta", e fica
+  // de fora da reindexação de position das listas normais (ver
+  // list.controller.ts: createList/updateList/deleteList excluem essa
+  // lista das contas e do reindex, pra não desalinhar a sequência 0..n-1
+  // das listas de verdade). Position dela é só um valor fixo, nunca lido.
+  isTemplatesList Boolean @default(false)
 
   board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
   cards Card[]
@@ -89,7 +97,6 @@ model Card {
   position    Int
   listId      String
   creatorId   String?
-  assigneeId  String?
   createdAt   DateTime  @default(now())
   dueDate     DateTime?
   completed   Boolean   @default(false)
@@ -97,15 +104,30 @@ model Card {
   list List @relation(fields: [listId], references: [id], onDelete: Cascade)
   // SetNull, não Cascade: excluir a conta de quem criou um card não deveria
   // apagar o card em si (que pode estar num board de outra pessoa) — só
-  // perde a atribuição de quem criou. Mesma lógica pro responsável
-  // (assignee): a pessoa saiu, o card continua existindo, só fica sem
-  // responsável designado.
+  // perde a atribuição de quem criou.
   creator        User?           @relation("CardCreator", fields: [creatorId], references: [id], onDelete: SetNull)
-  assignee       User?           @relation("CardAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  assignees      CardAssignee[]
   comments       Comment[]
   attachments    Attachment[]
   cardLabels     CardLabel[]
   checklistItems ChecklistItem[]
+}
+
+// Tabela de junção Card↔User pros responsáveis (N:N — um card pode ter
+// vários responsáveis, ex: tarefa feita em dupla). Mesmo padrão de
+// CardLabel. onDelete: Cascade nos dois lados (diferente do antigo campo
+// `assigneeId`, que era SetNull): como `userId` faz parte da chave
+// composta, não dá pra só "limpar" o valor — excluir a conta remove a
+// LINHA de atribuição (a pessoa não está mais atribuída), o card em si
+// continua existindo normalmente, igual antes.
+model CardAssignee {
+  cardId String
+  userId String
+
+  card Card @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([cardId, userId])
 }
 
 model Comment {

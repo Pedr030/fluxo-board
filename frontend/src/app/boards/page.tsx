@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  ApiError,
   Board,
   clearToken,
   createBoard,
   deleteBoard,
   getMe,
+  handleAuthError,
   hasToken,
   listBoards,
 } from "@/lib/api";
@@ -43,13 +43,10 @@ export default function BoardsPage() {
     listBoards()
       .then(({ boards }) => setBoards(boards))
       .catch((err) => {
-        // Token inválido/expirado: sem sessão pra recuperar, volta pro login.
         // Qualquer outra coisa (rede caiu, servidor fora do ar) é passageiro
-        // — deixa a pessoa tentar de novo sem perder a sessão.
-        if (err instanceof ApiError && err.status === 401) {
-          router.replace("/");
-          return;
-        }
+        // — deixa a pessoa tentar de novo sem perder a sessão. 401 (token
+        // inválido/expirado) é tratado por handleAuthError.
+        if (handleAuthError(err, router)) return;
         setLoadError("Não foi possível carregar seus boards. Verifique sua conexão.");
       })
       .finally(() => setLoading(false));

@@ -1,12 +1,10 @@
 import { canEditCard, formatDueDate, isCardOverdue } from "@/components/Card";
 
 describe("canEditCard", () => {
-  const base = { assignee: null as { id: string; name: string; avatarUrl: string | null } | null };
+  const base = { assigneeIds: [] as string[] };
 
   it("membro não restrito sempre pode editar, mesmo card de outra pessoa", () => {
-    expect(
-      canEditCard({ assignee: { id: "outro", name: "X", avatarUrl: null } }, "eu", false)
-    ).toBe(true);
+    expect(canEditCard({ assigneeIds: ["outro"] }, "eu", false)).toBe(true);
   });
 
   it("membro restrito pode editar card sem responsável (livre pra pegar)", () => {
@@ -14,21 +12,19 @@ describe("canEditCard", () => {
   });
 
   it("membro restrito pode editar card atribuído a si mesmo", () => {
-    expect(
-      canEditCard({ assignee: { id: "eu", name: "Eu", avatarUrl: null } }, "eu", true)
-    ).toBe(true);
+    expect(canEditCard({ assigneeIds: ["eu"] }, "eu", true)).toBe(true);
+  });
+
+  it("membro restrito pode editar card com vários responsáveis, se estiver entre eles", () => {
+    expect(canEditCard({ assigneeIds: ["outro", "eu"] }, "eu", true)).toBe(true);
   });
 
   it("membro restrito NÃO pode editar card atribuído a outra pessoa", () => {
-    expect(
-      canEditCard({ assignee: { id: "outro", name: "Outro", avatarUrl: null } }, "eu", true)
-    ).toBe(false);
+    expect(canEditCard({ assigneeIds: ["outro"] }, "eu", true)).toBe(false);
   });
 
   it("membro restrito sem currentUserId (edge case) não pode editar card atribuído", () => {
-    expect(
-      canEditCard({ assignee: { id: "outro", name: "Outro", avatarUrl: null } }, null, true)
-    ).toBe(false);
+    expect(canEditCard({ assigneeIds: ["outro"] }, null, true)).toBe(false);
   });
 });
 

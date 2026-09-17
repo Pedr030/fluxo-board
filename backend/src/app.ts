@@ -34,7 +34,11 @@ export function createApp(frontendUrl: string) {
   app.set("trust proxy", 1);
 
   app.use(helmet());
-  app.use(cors({ origin: frontendUrl }));
+  // exposedHeaders: sem isso, o browser esconde o header X-Refreshed-Token
+  // do JS do frontend por padrão (CORS só libera um punhado de headers
+  // "seguros" nativamente) — a sessão deslizante (auth.middleware.ts)
+  // depende de conseguir ler esse header na resposta.
+  app.use(cors({ origin: frontendUrl, exposedHeaders: ["X-Refreshed-Token"] }));
   app.use(express.json({ limit: "1mb" }));
   app.use(globalLimiter);
 

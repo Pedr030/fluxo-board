@@ -97,10 +97,39 @@ export function clearToken() {
   localStorage.removeItem(tokenKey());
 }
 
+// Sessão deslizante: o backend reemite o token (mesmo prazo, ver
+// auth.middleware.ts) quando o atual já passou da metade da validade, e
+// devolve no header X-Refreshed-Token — troca silenciosa aqui. Chamada por
+// toda função que faz fetch autenticado, incluindo as 3 que não passam por
+// apiFetch (upload de avatar/anexo usa FormData, não o fetch genérico).
+function applyRefreshedToken(res: Response) {
+  const refreshed = res.headers.get("X-Refreshed-Token");
+  if (refreshed) saveToken(refreshed);
+}
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
   }
+}
+
+/**
+ * Trata 401 de forma centralizada: limpa o token e manda pro login. Usado no
+ * catch de todo fetch inicial de página protegida — sem isso (ou esquecendo
+ * de chamar em alguma página nova) o login, que só checa hasToken()
+ * (presença, não validade), manda de volta e recria o loop infinito de
+ * redirect. Recebe `router` em vez de navegar direto porque essa função
+ * roda fora de componente e não tem acesso a useRouter().
+ * Retorna true se tratou o erro (chamador deve parar ali), false caso
+ * contrário (chamador segue com seu próprio tratamento de erro).
+ */
+export function handleAuthError(err: unknown, router: { replace: (href: string) => void }): boolean {
+  if (err instanceof ApiError && err.status === 401) {
+    clearToken();
+    router.replace("/");
+    return true;
+  }
+  return false;
 }
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -113,6 +142,8 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
       ...options.headers,
     },
   });
+
+  applyRefreshedToken(res);
 
   if (!res.ok) {
     throw new ApiError(res.status, await res.text());
@@ -162,13 +193,14 @@ export interface CardItem {
   completed: boolean;
   labelIds: string[];
   checklistItems: ChecklistItem[];
-  assignee: { id: string; name: string; avatarUrl: string | null } | null;
+  assigneeIds: string[];
 }
 
 export interface ListItem {
   id: string;
   title: string;
   position: number;
+  isTemplatesList: boolean;
   cards: CardItem[];
 }
 
@@ -251,6 +283,18 @@ export const createCard = (listId: string, title: string) =>
     body: JSON.stringify({ title }),
   });
 
+export const createCardFromTemplate = (listId: string, templateId: string) =>
+  apiFetch<{ card: CardItem }>(`/lists/${listId}/cards`, {
+    method: "POST",
+    body: JSON.stringify({ fromTemplateId: templateId }),
+  });
+
+export const createTemplate = (boardId: string, title: string) =>
+  apiFetch<{ card: CardItem }>(`/boards/${boardId}/templates`, {
+    method: "POST",
+    body: JSON.stringify({ title }),
+  });
+
 export const moveCard = (cardId: string, listId: string, position: number) =>
   apiFetch<{ card: CardItem }>(`/cards/${cardId}`, {
     method: "PATCH",
@@ -264,7 +308,6 @@ export const updateCard = (
     description?: string | null;
     dueDate?: string | null;
     completed?: boolean;
-    assigneeId?: string | null;
   }
 ) =>
   apiFetch<{ card: CardItem }>(`/cards/${cardId}`, {
@@ -274,6 +317,18 @@ export const updateCard = (
 
 export const deleteCard = (cardId: string) =>
   apiFetch<void>(`/cards/${cardId}`, { method: "DELETE" });
+
+export const duplicateCard = (cardId: string) =>
+  apiFetch<{ card: CardItem }>(`/cards/${cardId}/duplicate`, { method: "POST" });
+
+export const assignMember = (cardId: string, userId: string) =>
+  apiFetch<void>(`/cards/${cardId}/assignees`, {
+    method: "POST",
+    body: JSON.stringify({ userId }),
+  });
+
+export const unassignMember = (cardId: string, userId: string) =>
+  apiFetch<void>(`/cards/${cardId}/assignees/${userId}`, { method: "DELETE" });
 
 export const inviteMember = (boardId: string, email: string) =>
   apiFetch<{ member: Member }>(`/boards/${boardId}/invite`, {
@@ -330,6 +385,8 @@ export async function updateAvatar(file: File): Promise<{ user: User }> {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     body: formData,
   });
+
+  applyRefreshedToken(res);
 
   if (!res.ok) {
     throw new ApiError(res.status, await res.text());
@@ -396,6 +453,8 @@ export async function createAttachment(cardId: string, file: File): Promise<{ at
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     body: formData,
   });
+
+  applyRefreshedToken(res);
 
   if (!res.ok) {
     throw new ApiError(res.status, await res.text());

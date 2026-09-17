@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   DndContext,
@@ -28,9 +29,12 @@ import {
   Member,
   Role,
   createList as apiCreateList,
+  createTemplate as apiCreateTemplate,
+  deleteCard as apiDeleteCard,
   deleteLabel as apiDeleteLabel,
   getBoard,
   getMe,
+  handleAuthError,
   inviteMember as apiInviteMember,
   listActivity,
   listMembers,
@@ -41,9 +45,12 @@ import {
 import { Avatar } from "./Avatar";
 import { CardData, CardView } from "./Card";
 import { CardTile } from "./CardTile";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { CreateLabelForm } from "./CreateLabelForm";
 import { ArrowLeftIcon, SidebarIcon, TrashIcon, UserIcon } from "./icons";
 import { List, ListData } from "./List";
+import { TemplateDetailModal } from "./TemplateDetailModal";
+import { TemplateTile } from "./TemplateTile";
 import { ThemeToggle } from "./ThemeToggle";
 
 /**
@@ -225,11 +232,7 @@ function LabelColumn({
   }
 
   return (
-    <div
-      className={`flex w-80 shrink-0 flex-col gap-3 rounded-list border border-surface-border bg-surface/70 p-4 ${
-        collapsed ? "self-start" : ""
-      }`}
-    >
+    <div className="flex w-80 shrink-0 flex-col gap-3 rounded-list border border-surface-border bg-surface/70 p-4">
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           {color && <span style={{ backgroundColor: color }} className="h-3 w-3 shrink-0 rounded-full" />}
@@ -267,6 +270,7 @@ function LabelColumn({
 }
 
 export function Board({ boardId }: { boardId: string }) {
+  const router = useRouter();
   const [lists, setLists] = useState<ListData[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -277,12 +281,27 @@ export function Board({ boardId }: { boardId: string }) {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteStatus, setInviteStatus] = useState<{ ok: boolean; message: string } | null>(null);
   const [inviting, setInviting] = useState(false);
+  const [invitePickerOpen, setInvitePickerOpen] = useState(false);
   const [myRole, setMyRole] = useState<Role | null>(null);
   const [myRestricted, setMyRestricted] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [memberActionError, setMemberActionError] = useState<string | null>(null);
-  const [view, setView] = useState<"board" | "members" | "labels" | "activity">("board");
+  const [view, setView] = useState<"board" | "members" | "labels" | "activity" | "templates">(
+    "board"
+  );
+  const [creatingTemplate, setCreatingTemplate] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  // Modelo recém-criado: abre o TemplateDetailModal na hora (mesmo padrão
+  // do "criar card em branco" em List.tsx) em vez de pedir o nome numa
+  // janelinha separada — aqui nem faz sentido ter esse passo intermediário,
+  // já que não existe "criar modelo a partir de outro modelo".
+  const [justCreatedTemplate, setJustCreatedTemplate] = useState<CardData | null>(null);
+  const [deleteJustCreatedTemplateOpen, setDeleteJustCreatedTemplateOpen] = useState(false);
+  const [deletingJustCreatedTemplate, setDeletingJustCreatedTemplate] = useState(false);
+  const [deleteJustCreatedTemplateError, setDeleteJustCreatedTemplateError] = useState<
+    string | null
+  >(null);
   const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([]);
   const [actionError, setActionError] = useState<string | null>(null);
   const [labels, setLabels] = useState<Label[]>([]);
@@ -342,6 +361,7 @@ export function Board({ boardId }: { boardId: string }) {
         currentUserIdRef.current = user.id;
       })
       .catch((err) => {
+        if (handleAuthError(err, router)) return;
         if (err instanceof ApiError && err.status === 403) {
           setLoadError("Você não é membro deste board.");
         } else if (err instanceof ApiError && err.status === 404) {
@@ -366,11 +386,21 @@ export function Board({ boardId }: { boardId: string }) {
       setLists((prev) => [...prev, list]);
     }
 
-    function handleCardCreated({ card }: { card: CardData & { listId: string } }) {
+    // Insere na posição informada (não só empilha no fim): criar card
+    // sempre nasce no fim da lista (position === cards.length, então dá
+    // no mesmo), mas duplicar nasce logo depois do original, no meio.
+    function handleCardCreated({
+      card,
+    }: {
+      card: CardData & { listId: string; position: number };
+    }) {
       setLists((prev) =>
-        prev.map((list) =>
-          list.id === card.listId ? { ...list, cards: [...list.cards, card] } : list
-        )
+        prev.map((list) => {
+          if (list.id !== card.listId) return list;
+          const cards = [...list.cards];
+          cards.splice(Math.min(card.position, cards.length), 0, card);
+          return { ...list, cards };
+        })
       );
     }
 
@@ -481,6 +511,30 @@ export function Board({ boardId }: { boardId: string }) {
       );
     }
 
+    function handleCardAssigneeAdded({ cardId, userId }: { cardId: string; userId: string }) {
+      setLists((prev) =>
+        prev.map((list) => ({
+          ...list,
+          cards: list.cards.map((c) =>
+            c.id === cardId && !c.assigneeIds.includes(userId)
+              ? { ...c, assigneeIds: [...c.assigneeIds, userId] }
+              : c
+          ),
+        }))
+      );
+    }
+
+    function handleCardAssigneeRemoved({ cardId, userId }: { cardId: string; userId: string }) {
+      setLists((prev) =>
+        prev.map((list) => ({
+          ...list,
+          cards: list.cards.map((c) =>
+            c.id === cardId ? { ...c, assigneeIds: c.assigneeIds.filter((id) => id !== userId) } : c
+          ),
+        }))
+      );
+    }
+
     function handleChecklistItemCreated({ item, cardId }: { item: ChecklistItem; cardId: string }) {
       setLists((prev) =>
         prev.map((list) => ({
@@ -562,6 +616,8 @@ export function Board({ boardId }: { boardId: string }) {
     socket.on("label:deleted", handleLabelDeleted);
     socket.on("card:label-added", handleCardLabelAdded);
     socket.on("card:label-removed", handleCardLabelRemoved);
+    socket.on("card:assignee-added", handleCardAssigneeAdded);
+    socket.on("card:assignee-removed", handleCardAssigneeRemoved);
     socket.on("checklist-item:created", handleChecklistItemCreated);
     socket.on("checklist-item:updated", handleChecklistItemUpdated);
     socket.on("checklist-item:deleted", handleChecklistItemDeleted);
@@ -585,6 +641,8 @@ export function Board({ boardId }: { boardId: string }) {
       socket.off("label:deleted", handleLabelDeleted);
       socket.off("card:label-added", handleCardLabelAdded);
       socket.off("card:label-removed", handleCardLabelRemoved);
+      socket.off("card:assignee-added", handleCardAssigneeAdded);
+      socket.off("card:assignee-removed", handleCardAssigneeRemoved);
       socket.off("checklist-item:created", handleChecklistItemCreated);
       socket.off("checklist-item:updated", handleChecklistItemUpdated);
       socket.off("checklist-item:deleted", handleChecklistItemDeleted);
@@ -637,6 +695,34 @@ export function Board({ boardId }: { boardId: string }) {
       setCreateListError("Não foi possível criar a lista. Tente de novo.");
     } finally {
       setCreatingList(false);
+    }
+  }
+
+  async function handleCreateTemplate() {
+    setCreatingTemplate(true);
+    setTemplateError(null);
+    try {
+      const { card } = await apiCreateTemplate(boardId, "Novo modelo");
+      setJustCreatedTemplate(card);
+    } catch {
+      setTemplateError("Não foi possível criar o modelo. Tente de novo.");
+    } finally {
+      setCreatingTemplate(false);
+    }
+  }
+
+  async function handleDeleteJustCreatedTemplate() {
+    if (!justCreatedTemplate) return;
+    setDeleteJustCreatedTemplateError(null);
+    setDeletingJustCreatedTemplate(true);
+    try {
+      await apiDeleteCard(justCreatedTemplate.id);
+      setDeleteJustCreatedTemplateOpen(false);
+      setJustCreatedTemplate(null);
+    } catch {
+      setDeleteJustCreatedTemplateError("Não foi possível excluir o modelo.");
+    } finally {
+      setDeletingJustCreatedTemplate(false);
     }
   }
 
@@ -793,6 +879,14 @@ export function Board({ boardId }: { boardId: string }) {
     );
   }
 
+  // A lista de modelos (ver PROJECT_SPEC.md, seção 4 — `isTemplatesList`)
+  // nunca aparece no Quadro nem na aba "Por etiqueta": `boardLists` é o que
+  // as duas usam pra renderizar. `templates` alimenta a aba "Modelos" e o
+  // seletor "criar a partir de um modelo" em cada lista.
+  const boardLists = lists.filter((l) => !l.isTemplatesList);
+  const templatesList = lists.find((l) => l.isTemplatesList);
+  const templates = templatesList?.cards ?? [];
+
   return (
     <div className="flex h-screen flex-col bg-surface-muted">
       {actionError && (
@@ -863,6 +957,14 @@ export function Board({ boardId }: { boardId: string }) {
               }`}
             >
               Atividade
+            </button>
+            <button
+              onClick={() => setView("templates")}
+              className={`rounded-card px-4 py-1.5 text-sm font-medium transition-colors ${
+                view === "templates" ? "bg-surface text-ink shadow-card" : "text-ink-soft"
+              }`}
+            >
+              Modelos
             </button>
           </div>
 
@@ -958,8 +1060,104 @@ export function Board({ boardId }: { boardId: string }) {
             </nav>
           )}
         </div>
+      ) : view === "templates" ? (
+        <div className="mx-auto w-full max-w-xl overflow-y-auto p-6">
+          <p className="mb-3 text-sm text-ink-soft">
+            Modelos guardam título, descrição, etiquetas e checklist prontos — use &ldquo;criar a
+            partir de um modelo&rdquo; ao adicionar um card em qualquer lista, ou duplique um
+            modelo aqui pra ajustar antes.
+          </p>
+          <button
+            type="button"
+            onClick={handleCreateTemplate}
+            disabled={creatingTemplate}
+            className="mb-4 rounded-card p-1.5 text-sm font-medium text-brand-500 transition-colors hover:bg-brand-50 disabled:opacity-60 dark:hover:bg-brand-500/10"
+          >
+            {creatingTemplate ? "Criando..." : "+ Adicionar modelo"}
+          </button>
+          {templateError && <p className="mb-3 text-xs text-red-600 dark:text-red-400">{templateError}</p>}
+          <div className="flex flex-col gap-3">
+            {templates.map((template) => (
+              <TemplateTile key={template.id} template={template} labels={labels} boardId={boardId} />
+            ))}
+            {templates.length === 0 && (
+              <p className="text-sm text-ink-soft">Nenhum modelo ainda.</p>
+            )}
+          </div>
+          <ConfirmDialog
+            open={deleteJustCreatedTemplateOpen}
+            title="Excluir este modelo?"
+            description="Essa ação não pode ser desfeita."
+            pending={deletingJustCreatedTemplate}
+            error={deleteJustCreatedTemplateError}
+            onConfirm={handleDeleteJustCreatedTemplate}
+            onCancel={() => setDeleteJustCreatedTemplateOpen(false)}
+          />
+          {justCreatedTemplate && (
+            <TemplateDetailModal
+              template={templates.find((t) => t.id === justCreatedTemplate.id) ?? justCreatedTemplate}
+              labels={labels}
+              boardId={boardId}
+              open={justCreatedTemplate !== null}
+              onClose={() => setJustCreatedTemplate(null)}
+              onDelete={() => setDeleteJustCreatedTemplateOpen(true)}
+            />
+          )}
+        </div>
       ) : view === "members" ? (
         <div className="mx-auto w-full max-w-xl p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-display text-lg font-semibold text-ink">Membros</h2>
+            {(myRole === "OWNER" || myRole === "ADMIN") && (
+              <div className="relative">
+                <button
+                  onClick={() => setInvitePickerOpen((v) => !v)}
+                  className="rounded-card bg-flow-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-flow-600"
+                >
+                  Convidar
+                </button>
+                {invitePickerOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setInvitePickerOpen(false)} />
+                    <div
+                      className="absolute right-0 top-full z-20 mt-2 w-72 rounded-card border border-surface-border bg-surface p-3 shadow-card"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <p className="mb-2 text-xs font-medium text-ink-soft">Convidar por email</p>
+                      <form onSubmit={handleInvite} className="flex flex-col gap-2">
+                        <input
+                          type="email"
+                          autoFocus
+                          className="rounded-card border border-surface-border bg-surface p-2.5 text-sm text-ink outline-none transition-colors focus:border-brand-500"
+                          placeholder="email@exemplo.com"
+                          value={inviteEmail}
+                          onChange={(e) => setInviteEmail(e.target.value)}
+                        />
+                        <button
+                          type="submit"
+                          disabled={inviting}
+                          className="rounded-card bg-flow-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-flow-600 disabled:opacity-60"
+                        >
+                          {inviting ? "Convidando..." : "Convidar"}
+                        </button>
+                      </form>
+                      {inviteStatus && (
+                        <p
+                          className={`mt-2 text-xs ${
+                            inviteStatus.ok
+                              ? "text-flow-600 dark:text-flow-400"
+                              : "text-red-600 dark:text-red-400"
+                          }`}
+                        >
+                          {inviteStatus.message}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
           <ul className="flex flex-col gap-3">
             {members.map((m) => {
               const roleLabel = m.role === "OWNER" ? "Dono" : m.role === "ADMIN" ? "Admin" : "Membro";
@@ -974,9 +1172,21 @@ export function Board({ boardId }: { boardId: string }) {
                   key={m.id}
                   className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-surface-border bg-surface p-4 text-base shadow-card"
                 >
-                  <div className="min-w-0">
-                    <p className="font-medium text-ink">{m.user.name}</p>
-                    <p className="text-sm text-ink-soft">{m.user.email}</p>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Avatar
+                      name={m.user.name}
+                      avatarUrl={m.user.avatarUrl}
+                      className="h-11 w-11 shrink-0 text-base"
+                    />
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-1.5 truncate font-medium text-ink">
+                        <span className="truncate">{m.user.name}</span>
+                        {m.user.id === currentUserId && (
+                          <span className="shrink-0 text-xs font-normal text-ink-soft">(você)</span>
+                        )}
+                      </p>
+                      <p className="truncate text-sm text-ink-soft">{m.user.email}</p>
+                    </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {m.restricted && (
@@ -1013,34 +1223,6 @@ export function Board({ boardId }: { boardId: string }) {
           {memberActionError && (
             <p className="mt-2 text-sm text-red-600 dark:text-red-400">{memberActionError}</p>
           )}
-
-          {(myRole === "OWNER" || myRole === "ADMIN") && (
-            <form onSubmit={handleInvite} className="mt-5 flex gap-3">
-              <input
-                type="email"
-                className="flex-1 rounded-card border border-surface-border bg-surface p-3 text-base text-ink outline-none transition-colors focus:border-brand-500"
-                placeholder="Convidar por email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-              />
-              <button
-                type="submit"
-                disabled={inviting}
-                className="rounded-card bg-flow-500 px-4 text-base font-medium text-white transition-colors hover:bg-flow-600 disabled:opacity-60"
-              >
-                Convidar
-              </button>
-            </form>
-          )}
-          {inviteStatus && (
-            <p
-              className={`mt-2 text-xs ${
-                inviteStatus.ok ? "text-flow-600 dark:text-flow-400" : "text-red-600 dark:text-red-400"
-              }`}
-            >
-              {inviteStatus.message}
-            </p>
-          )}
         </div>
       ) : view === "labels" ? (
         <div className="flex flex-1 overflow-hidden">
@@ -1069,7 +1251,7 @@ export function Board({ boardId }: { boardId: string }) {
             </button>
             <div className="flex flex-col gap-1">
               {labels.map((label) => {
-                const count = lists.flatMap((l) => l.cards).filter((c) => c.labelIds.includes(label.id)).length;
+                const count = boardLists.flatMap((l) => l.cards).filter((c) => c.labelIds.includes(label.id)).length;
                 const active = labelFilterId === label.id;
                 return (
                   <div key={label.id} className="group flex items-center gap-1">
@@ -1120,7 +1302,7 @@ export function Board({ boardId }: { boardId: string }) {
             {labelFilterId ? (
               (() => {
                 const label = labels.find((l) => l.id === labelFilterId);
-                const cardsWithLabel = lists
+                const cardsWithLabel = boardLists
                   .flatMap((l) => l.cards)
                   .filter((c) => c.labelIds.includes(labelFilterId))
                   .filter(matchesStatusFilter);
@@ -1167,9 +1349,9 @@ export function Board({ boardId }: { boardId: string }) {
                 }`}
               >
                 <StatusFilterBar value={statusFilter} onChange={setStatusFilter} />
-                <div className="flex flex-1 gap-5 overflow-x-auto">
+                <div className="flex flex-1 items-start gap-5 overflow-x-auto">
                 {labels.map((label) => {
-                  const cardsWithLabel = lists
+                  const cardsWithLabel = boardLists
                     .flatMap((l) => l.cards)
                     .filter((c) => c.labelIds.includes(label.id))
                     .filter(matchesStatusFilter);
@@ -1191,7 +1373,7 @@ export function Board({ boardId }: { boardId: string }) {
                 })}
 
                 {(() => {
-                  const unlabeled = lists
+                  const unlabeled = boardLists
                     .flatMap((l) => l.cards)
                     .filter((c) => c.labelIds.length === 0)
                     .filter(matchesStatusFilter);
@@ -1221,12 +1403,12 @@ export function Board({ boardId }: { boardId: string }) {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <main className="flex flex-1 gap-5 overflow-x-auto p-6">
+          <main className="flex flex-1 items-start gap-5 overflow-x-auto p-6">
             <SortableContext
-              items={lists.map((l) => `list-${l.id}`)}
+              items={boardLists.map((l) => `list-${l.id}`)}
               strategy={horizontalListSortingStrategy}
             >
-              {lists.map((list) => (
+              {boardLists.map((list) => (
                 <List
                   key={list.id}
                   list={list}
@@ -1235,6 +1417,7 @@ export function Board({ boardId }: { boardId: string }) {
                   currentUserId={currentUserId}
                   restricted={myRestricted}
                   boardId={boardId}
+                  templates={templates}
                 />
               ))}
             </SortableContext>

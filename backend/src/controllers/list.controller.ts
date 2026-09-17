@@ -27,7 +27,7 @@ export async function createList(req: AuthRequest, res: Response) {
     return res.status(403).json({ error: "Você não é membro deste board" });
   }
 
-  const position = await prisma.list.count({ where: { boardId } });
+  const position = await prisma.list.count({ where: { boardId, isTemplatesList: false } });
   const list = await prisma.list.create({
     data: { title: parsed.data.title, boardId, position },
   });
@@ -75,8 +75,10 @@ export async function updateList(req: AuthRequest, res: Response) {
 
   if (toPosition !== undefined) {
     const orderedListIds = await prisma.$transaction(async (tx) => {
+      // isTemplatesList: false — a lista de modelos nunca participa da
+      // reordenação das listas normais (ver comentário no schema).
       const siblings = await tx.list.findMany({
-        where: { boardId: list.boardId },
+        where: { boardId: list.boardId, isTemplatesList: false },
         orderBy: { position: "asc" },
       });
       const reordered = siblings.filter((l) => l.id !== listId);
@@ -125,8 +127,9 @@ export async function deleteList(req: AuthRequest, res: Response) {
 
   await prisma.$transaction(async (tx) => {
     await tx.list.delete({ where: { id: listId } });
+    // isTemplatesList: false — mesma razão do reorder acima.
     const siblings = await tx.list.findMany({
-      where: { boardId: list.boardId },
+      where: { boardId: list.boardId, isTemplatesList: false },
       orderBy: { position: "asc" },
     });
     await Promise.all(

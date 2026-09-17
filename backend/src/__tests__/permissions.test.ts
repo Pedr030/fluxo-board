@@ -185,9 +185,9 @@ describe("Membro restrito ('restricted') só edita/move/exclui os próprios card
     const listB = await createList(owner.token, boardId, "B");
     const cardId = await createCard(owner.token, listA, "Card");
     await request(app)
-      .patch(`/cards/${cardId}`)
+      .post(`/cards/${cardId}/assignees`)
       .set("Authorization", `Bearer ${owner.token}`)
-      .send({ assigneeId: member.userId });
+      .send({ userId: member.userId });
 
     const editRes = await request(app)
       .patch(`/cards/${cardId}`)
@@ -225,9 +225,9 @@ describe("Membro restrito ('restricted') só edita/move/exclui os próprios card
     const listB = await createList(owner.token, boardId, "B");
     const cardId = await createCard(owner.token, listA, "Card da dona");
     await request(app)
-      .patch(`/cards/${cardId}`)
+      .post(`/cards/${cardId}/assignees`)
       .set("Authorization", `Bearer ${owner.token}`)
-      .send({ assigneeId: owner.userId });
+      .send({ userId: owner.userId });
 
     const editRes = await request(app)
       .patch(`/cards/${cardId}`)
@@ -252,9 +252,9 @@ describe("Membro restrito ('restricted') só edita/move/exclui os próprios card
     const listId = await createList(owner.token, boardId, "Lista");
     const cardId = await createCard(owner.token, listId, "Card da dona");
     await request(app)
-      .patch(`/cards/${cardId}`)
+      .post(`/cards/${cardId}/assignees`)
       .set("Authorization", `Bearer ${owner.token}`)
-      .send({ assigneeId: owner.userId });
+      .send({ userId: owner.userId });
 
     const createRes = await request(app)
       .post(`/lists/${listId}/cards`)
@@ -275,9 +275,9 @@ describe("Membro restrito ('restricted') só edita/move/exclui os próprios card
     const listId = await createList(owner.token, boardId, "Lista");
     const cardId = await createCard(owner.token, listId, "Card");
     await request(app)
-      .patch(`/cards/${cardId}`)
+      .post(`/cards/${cardId}/assignees`)
       .set("Authorization", `Bearer ${owner.token}`)
-      .send({ assigneeId: owner.userId });
+      .send({ userId: owner.userId });
 
     // outro board member, sem restricted, mexendo num card que não é dele
     const other = await registerUser("outro@teste.com");

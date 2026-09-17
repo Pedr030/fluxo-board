@@ -50,7 +50,7 @@ async function getBoard(token: string, boardId: string) {
         position: number;
         dueDate: string | null;
         completed: boolean;
-        assignee: { id: string; name: string; avatarUrl: string | null } | null;
+        assigneeIds: string[];
       }[];
     }[];
   };
@@ -262,7 +262,7 @@ describe("Cards: editar e excluir", () => {
   });
 });
 
-describe("Cards: atribuição de responsável", () => {
+describe("Cards: atribuição de responsáveis (POST/DELETE /cards/:id/assignees)", () => {
   async function registerUserWithId(email: string) {
     const res = await request(app)
       .post("/auth/register")
@@ -270,7 +270,7 @@ describe("Cards: atribuição de responsável", () => {
     return { token: res.body.token as string, userId: res.body.user.id as string };
   }
 
-  it("atribui o card a um membro do board e devolve o assignee completo", async () => {
+  it("atribui o card a um membro do board", async () => {
     const owner = await registerUserWithId("dona@teste.com");
     const member = await registerUserWithId("membro@teste.com");
     const boardId = await createBoard(owner.token);
@@ -282,15 +282,40 @@ describe("Cards: atribuição de responsável", () => {
     const cardId = await createCard(owner.token, listId, "Card");
 
     const res = await request(app)
-      .patch(`/cards/${cardId}`)
+      .post(`/cards/${cardId}/assignees`)
       .set("Authorization", `Bearer ${owner.token}`)
-      .send({ assigneeId: member.userId });
+      .send({ userId: member.userId });
 
-    expect(res.status).toBe(200);
-    expect(res.body.card.assignee).toMatchObject({ id: member.userId, name: "membro" });
+    expect(res.status).toBe(204);
 
     const board = await getBoard(owner.token, boardId);
-    expect(board.lists[0].cards[0].assignee).toMatchObject({ id: member.userId });
+    expect(board.lists[0].cards[0].assigneeIds).toEqual([member.userId]);
+  });
+
+  it("um card aceita mais de um responsável", async () => {
+    const owner = await registerUserWithId("dona@teste.com");
+    const member = await registerUserWithId("membro@teste.com");
+    const boardId = await createBoard(owner.token);
+    await request(app)
+      .post(`/boards/${boardId}/invite`)
+      .set("Authorization", `Bearer ${owner.token}`)
+      .send({ email: "membro@teste.com" });
+    const listId = await createList(owner.token, boardId, "Lista");
+    const cardId = await createCard(owner.token, listId, "Card");
+
+    await request(app)
+      .post(`/cards/${cardId}/assignees`)
+      .set("Authorization", `Bearer ${owner.token}`)
+      .send({ userId: owner.userId });
+    await request(app)
+      .post(`/cards/${cardId}/assignees`)
+      .set("Authorization", `Bearer ${owner.token}`)
+      .send({ userId: member.userId });
+
+    const board = await getBoard(owner.token, boardId);
+    expect(board.lists[0].cards[0].assigneeIds.sort()).toEqual(
+      [owner.userId, member.userId].sort()
+    );
   });
 
   it("400 ao atribuir pra alguém que não é membro do board", async () => {
@@ -301,33 +326,33 @@ describe("Cards: atribuição de responsável", () => {
     const cardId = await createCard(owner.token, listId, "Card");
 
     const res = await request(app)
-      .patch(`/cards/${cardId}`)
+      .post(`/cards/${cardId}/assignees`)
       .set("Authorization", `Bearer ${owner.token}`)
-      .send({ assigneeId: outsider.userId });
+      .send({ userId: outsider.userId });
 
     expect(res.status).toBe(400);
   });
 
-  it("remove a atribuição mandando assigneeId: null", async () => {
+  it("remove um responsável com DELETE /cards/:id/assignees/:userId", async () => {
     const owner = await registerUserWithId("dona@teste.com");
     const boardId = await createBoard(owner.token);
     const listId = await createList(owner.token, boardId, "Lista");
     const cardId = await createCard(owner.token, listId, "Card");
     await request(app)
-      .patch(`/cards/${cardId}`)
+      .post(`/cards/${cardId}/assignees`)
       .set("Authorization", `Bearer ${owner.token}`)
-      .send({ assigneeId: owner.userId });
+      .send({ userId: owner.userId });
 
     const res = await request(app)
-      .patch(`/cards/${cardId}`)
-      .set("Authorization", `Bearer ${owner.token}`)
-      .send({ assigneeId: null });
+      .delete(`/cards/${cardId}/assignees/${owner.userId}`)
+      .set("Authorization", `Bearer ${owner.token}`);
 
-    expect(res.status).toBe(200);
-    expect(res.body.card.assignee).toBeNull();
+    expect(res.status).toBe(204);
+    const board = await getBoard(owner.token, boardId);
+    expect(board.lists[0].cards[0].assigneeIds).toEqual([]);
   });
 
-  it("card recém-criado nasce sem assignee", async () => {
+  it("card recém-criado nasce sem responsável", async () => {
     const owner = await registerUserWithId("dona@teste.com");
     const boardId = await createBoard(owner.token);
     const listId = await createList(owner.token, boardId, "Lista");
@@ -337,24 +362,24 @@ describe("Cards: atribuição de responsável", () => {
       .set("Authorization", `Bearer ${owner.token}`)
       .send({ title: "Card novo" });
 
-    expect(res.body.card.assignee).toBeNull();
+    expect(res.body.card.assigneeIds).toEqual([]);
   });
 
-  it("atribuir de novo ao mesmo responsável não duplica entrada no histórico de atividade", async () => {
+  it("atribuir de novo à mesma pessoa não duplica entrada no histórico de atividade", async () => {
     const owner = await registerUserWithId("dona@teste.com");
     const boardId = await createBoard(owner.token);
     const listId = await createList(owner.token, boardId, "Lista");
     const cardId = await createCard(owner.token, listId, "Card");
 
     await request(app)
-      .patch(`/cards/${cardId}`)
+      .post(`/cards/${cardId}/assignees`)
       .set("Authorization", `Bearer ${owner.token}`)
-      .send({ assigneeId: owner.userId });
-    // clica de novo na mesma pessoa já atribuída — não é uma mudança de verdade
+      .send({ userId: owner.userId });
+    // atribui de novo a mesma pessoa já atribuída — idempotente, não duplica
     await request(app)
-      .patch(`/cards/${cardId}`)
+      .post(`/cards/${cardId}/assignees`)
       .set("Authorization", `Bearer ${owner.token}`)
-      .send({ assigneeId: owner.userId });
+      .send({ userId: owner.userId });
 
     const activityRes = await request(app)
       .get(`/boards/${boardId}/activity`)
@@ -363,6 +388,9 @@ describe("Cards: atribuição de responsável", () => {
       a.summary.startsWith("atribuiu")
     );
     expect(assignmentEntries).toHaveLength(1);
+
+    const board = await getBoard(owner.token, boardId);
+    expect(board.lists[0].cards[0].assigneeIds).toEqual([owner.userId]);
   });
 });
 
@@ -399,5 +427,140 @@ describe("Lists: editar e excluir", () => {
     const orphanCard = await prisma.card.findFirst({ where: { listId: listB } });
     expect(orphanCard).toBeNull();
     expect(board.lists[0].id).toBe(listA);
+  });
+});
+
+describe("Cards: duplicar (POST /cards/:id/duplicate)", () => {
+  it("cria a cópia logo depois do original, na mesma lista, reindexando quem vem depois", async () => {
+    const token = await registerUser("dona@teste.com");
+    const boardId = await createBoard(token);
+    const listId = await createList(token, boardId, "Lista");
+    const cardId = await createCard(token, listId, "Original");
+    await createCard(token, listId, "Depois"); // position 1
+
+    const dup = await request(app)
+      .post(`/cards/${cardId}/duplicate`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(dup.status).toBe(201);
+    expect(dup.body.card.title).toBe("Original (cópia)");
+
+    const board = await getBoard(token, boardId);
+    const cards = board.lists[0].cards;
+    expect(cards.map((c) => c.title)).toEqual(["Original", "Original (cópia)", "Depois"]);
+    expect(cards.map((c) => c.position)).toEqual([0, 1, 2]);
+  });
+
+  it("copia descrição e etiquetas, mas não responsável/prazo/conclusão", async () => {
+    const token = await registerUser("dona@teste.com");
+    const boardId = await createBoard(token);
+    const listId = await createList(token, boardId, "Lista");
+    const cardId = await createCard(token, listId, "Original");
+
+    const label = await request(app)
+      .post(`/boards/${boardId}/labels`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ name: "Urgente", color: "#ef4444" });
+    const labelId = label.body.label.id as string;
+    await request(app)
+      .post(`/cards/${cardId}/labels`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ labelId });
+    await request(app)
+      .patch(`/cards/${cardId}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({
+        description: "Instruções do modelo",
+        dueDate: "2026-12-25T00:00:00.000Z",
+        completed: true,
+      });
+
+    const dup = await request(app)
+      .post(`/cards/${cardId}/duplicate`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(dup.body.card.description).toBe("Instruções do modelo");
+    expect(dup.body.card.labelIds).toEqual([labelId]);
+    expect(dup.body.card.dueDate).toBeNull();
+    expect(dup.body.card.completed).toBe(false);
+    expect(dup.body.card.assigneeIds).toEqual([]);
+  });
+
+  it("copia a checklist com os itens desmarcados, mesmo se o original tinha item feito", async () => {
+    const token = await registerUser("dona@teste.com");
+    const boardId = await createBoard(token);
+    const listId = await createList(token, boardId, "Lista");
+    const cardId = await createCard(token, listId, "Original");
+
+    const item = await request(app)
+      .post(`/cards/${cardId}/checklist-items`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ text: "Passo 1" });
+    await request(app)
+      .patch(`/checklist-items/${item.body.item.id}`)
+      .set("Authorization", `Bearer ${token}`)
+      .send({ done: true });
+
+    const dup = await request(app)
+      .post(`/cards/${cardId}/duplicate`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(dup.body.card.checklistItems).toHaveLength(1);
+    expect(dup.body.card.checklistItems[0]).toMatchObject({ text: "Passo 1", done: false });
+  });
+
+  it("membro restrito pode duplicar card atribuído a outra pessoa (mesma regra de criar card)", async () => {
+    const tokenOwner = await registerUser("dona@teste.com");
+    const tokenMember = await registerUser("membro@teste.com");
+    const boardId = await createBoard(tokenOwner);
+    await request(app)
+      .post(`/boards/${boardId}/invite`)
+      .set("Authorization", `Bearer ${tokenOwner}`)
+      .send({ email: "membro@teste.com" });
+    const membersRes = await request(app)
+      .get(`/boards/${boardId}/members`)
+      .set("Authorization", `Bearer ${tokenOwner}`);
+    const memberRow = membersRes.body.members.find((m: { user: { email: string } }) => m.user.email === "membro@teste.com");
+    await request(app)
+      .patch(`/boards/${boardId}/members/${memberRow.id}`)
+      .set("Authorization", `Bearer ${tokenOwner}`)
+      .send({ restricted: true });
+
+    const listId = await createList(tokenOwner, boardId, "Lista");
+    const cardId = await createCard(tokenOwner, listId, "Card da dona");
+
+    const dup = await request(app)
+      .post(`/cards/${cardId}/duplicate`)
+      .set("Authorization", `Bearer ${tokenMember}`);
+    expect(dup.status).toBe(201);
+  });
+
+  it("registra a duplicação no histórico de atividade", async () => {
+    const token = await registerUser("dona@teste.com");
+    const boardId = await createBoard(token);
+    const listId = await createList(token, boardId, "Lista");
+    const cardId = await createCard(token, listId, "Original");
+
+    await request(app).post(`/cards/${cardId}/duplicate`).set("Authorization", `Bearer ${token}`);
+
+    const activity = await request(app)
+      .get(`/boards/${boardId}/activity`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(activity.body.activities[0].summary).toBe('duplicou o card "Original"');
+  });
+
+  it("card inexistente devolve 404, e quem não é membro do board não pode duplicar", async () => {
+    const token = await registerUser("dona@teste.com");
+    const outsider = await registerUser("de-fora@teste.com");
+    const boardId = await createBoard(token);
+    const listId = await createList(token, boardId, "Lista");
+    const cardId = await createCard(token, listId, "Original");
+
+    const notFound = await request(app)
+      .post(`/cards/fantasma/duplicate`)
+      .set("Authorization", `Bearer ${token}`);
+    expect(notFound.status).toBe(404);
+
+    const forbidden = await request(app)
+      .post(`/cards/${cardId}/duplicate`)
+      .set("Authorization", `Bearer ${outsider}`);
+    expect(forbidden.status).toBe(403);
   });
 });

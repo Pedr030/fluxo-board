@@ -67,12 +67,13 @@ Já implementado em `backend/prisma/schema.prisma`. Resumo:
 | `User` | name, email, password (hash) | dono/membro de boards |
 | `Board` | title, ownerId | tem várias `List` |
 | `BoardMember` | boardId, userId, role (OWNER/ADMIN/MEMBER), restricted | liga User↔Board (N:N com atributo). `restricted` é uma dimensão separada do cargo: um MEMBER restrito só edita/move/exclui cards atribuídos a ele mesmo (ou sem responsável) — promover a ADMIN sempre limpa a flag |
-| `List` | title, position, boardId | tem vários `Card` |
-| `Card` | title, description, position, listId, creatorId, assigneeId, dueDate, completed | pertence a uma `List` |
+| `List` | title, position, boardId, isTemplatesList | tem vários `Card`. `isTemplatesList` marca a lista oculta de modelos (no máximo uma por board, criada sob demanda no primeiro `POST /boards/:id/templates`) — excluída de todo cálculo de posição das listas normais e nunca aparece no Quadro/Por etiqueta |
+| `Card` | title, description, position, listId, creatorId, dueDate, completed | pertence a uma `List`, tem vários responsáveis via `CardAssignee` |
 | `Comment` | text, cardId, authorId, createdAt | pertence a um `Card` |
 | `Attachment` | cardId, uploaderId, filename, mimeType, size, url, createdAt | pertence a um `Card` |
 | `Label` | boardId, name, color | pertence a um `Board`, paleta compartilhada |
 | `CardLabel` | cardId, labelId | tabela de junção N:N Card↔Label |
+| `CardAssignee` | cardId, userId | tabela de junção N:N Card↔User (responsáveis) — um card pode ter mais de uma pessoa (ex: tarefa feita em dupla) |
 | `ChecklistItem` | cardId, text, done, position | pertence a um `Card` (um card, uma checklist só) |
 | `Activity` | boardId, userId, summary, createdAt | pertence a um `Board` — não referencia Card/List (é um retrato congelado, não uma junção viva) |
 
@@ -107,9 +108,13 @@ Todas as rotas abaixo (exceto `/auth/*`) exigem header
 | POST | `/boards/:id/lists` | cria lista `{ title }` |
 | PATCH | `/lists/:id` | renomeia (`{ title }`) ou reordena (`{ position }`) lista |
 | DELETE | `/lists/:id` | remove lista (e os cards dela, em cascata) |
-| POST | `/lists/:id/cards` | cria card `{ title }` — aberto a qualquer membro, mesmo restrito |
-| PATCH | `/cards/:id` | edita/move card `{ title?, description?, listId?, position?, dueDate?, completed?, assigneeId? }` — `assigneeId` precisa ser membro do board (400 senão); 403 se quem chama é um membro restrito mexendo num card atribuído a outra pessoa |
+| POST | `/lists/:id/cards` | cria card `{ title }` **ou** `{ fromTemplateId }` (exatamente um dos dois) — o segundo copia título/descrição/etiquetas/checklist de um modelo (ver `/boards/:id/templates`) pro fim da lista; aberto a qualquer membro, mesmo restrito |
+| PATCH | `/cards/:id` | edita/move card `{ title?, description?, listId?, position?, dueDate?, completed? }` — 403 se quem chama é um membro restrito mexendo num card atribuído a outra pessoa (responsáveis não entram aqui, ver `/cards/:id/assignees` abaixo) |
+| POST | `/cards/:id/assignees` | atribui um membro do board ao card `{ userId }` — idempotente, mesmo padrão de `/cards/:id/labels`; um card aceita mais de um responsável; `userId` precisa ser membro do board (400 senão); mesma regra de 403 pra membro restrito |
+| DELETE | `/cards/:id/assignees/:userId` | remove um responsável do card |
 | DELETE | `/cards/:id` | remove card — mesma regra de 403 acima pra membro restrito |
+| POST | `/cards/:id/duplicate` | duplica o card (título+"(cópia)", descrição, etiquetas, checklist desmarcada) logo depois do original, na mesma lista — aberto a qualquer membro, mesmo restrito (emite `card:created`, não um evento próprio) |
+| POST | `/boards/:id/templates` | cria um modelo `{ title }` — é um `Card` numa lista especial oculta (`List.isTemplatesList`, título "Modelos", criada sob demanda na primeira chamada); não aparece no Quadro/Por etiqueta, não gera `Activity`; aberto a qualquer membro (emite `card:created`, e `list:created` só na primeira vez que a lista é criada) |
 | GET | `/cards/:id/comments` | lista comentários do card, em ordem cronológica |
 | POST | `/cards/:id/comments` | cria comentário `{ text }` |
 | DELETE | `/comments/:id` | remove comentário (só quem escreveu) |
@@ -285,3 +290,85 @@ Tipografia: `Unbounded` (wordmark/títulos), `Inter` (interface),
   te preparar pra falar sobre o projeto numa entrevista técnica.
 - Rode e teste cada etapa antes de pedir a próxima — isso evita acumular
   bugs de uma etapa que quebram a próxima.
+
+## 11. Roadmap futuro — features/UI (pós-reavaliação de set/2026)
+
+Levantado depois de uma rodada de reavaliação de segurança/dependências
+(seção 8 já cobre o que foi corrigido ali). Esse aqui é sobre produto —
+o que falta pro app em si, priorizado por esforço, não por importância.
+
+### Ganhos rápidos (baixo esforço, alto impacto de UX)
+
+- [x] **Duplicar card** — `POST /cards/:id/duplicate` copia título
+      (sufixo "(cópia)")/descrição/etiquetas/checklist (itens
+      desmarcados, mesmo se o original já tivesse algum feito) pra um
+      card novo, logo depois do original na mesma lista. Não copia
+      comentários/anexos/responsável/prazo/conclusão (específicos do
+      card original, não fazem sentido "herdados"). Aberto a qualquer
+      membro, mesmo restrito — é uma variação de criar card, não uma
+      edição do original.
+- [x] **Modelos de card (aba própria)** — cogitamos inicialmente não
+      criar um sistema separado (duplicar card já cobria o caso de
+      uso na prática), mas voltamos atrás: usar "duplicar" como
+      template manual dependia de já ter um card publicado, ficando
+      confuso quando ele já foi editado/movido. Implementado como uma
+      lista oculta (`List.isTemplatesList`, ver seção 3) — cada modelo
+      é só um `Card` normal nessa lista, reaproveitando toda a
+      infra existente de checklist/etiquetas em vez de um model novo.
+      Nova aba "Modelos" no board (`TemplateDetailModal`/`TemplateTile`
+      — versão enxuta do painel de card, só com título/descrição/
+      etiquetas/checklist, sem responsável/prazo/concluído/anexos/
+      comentários, que não fazem sentido pra algo que nunca é
+      "trabalhado"). Criar um modelo já abre esse painel na hora
+      (título provisório "Novo modelo", renomeia clicando nele — sem
+      pedir o nome numa janelinha à parte). Criar um card oferece a
+      mesma lógica: um botão único "+ Adicionar card" abre uma
+      janelinha com os modelos disponíveis (cria direto) ou "criar em
+      branco" (pede só o título, cria, e já abre o `CardDetailModal`
+      completo — em vez de só digitar um nome e pronto).
+- [x] **Múltiplos responsáveis por card** — `assigneeId` (único) virou
+      `CardAssignee` (N:N, ver seção 3): tarefa feita em dupla precisa
+      de mais de uma pessoa atribuída. Endpoints dedicados
+      `POST`/`DELETE /cards/:id/assignees` (mesmo padrão de etiqueta —
+      idempotente, um por vez), em vez de continuar no `PATCH /cards/:id`
+      genérico. `canEditCard` (regra do membro restrito) passa a checar
+      "está entre os responsáveis", não mais "é o responsável único".
+      Migração preserva os dados existentes (cada `assigneeId` antigo
+      virou uma linha em `CardAssignee` antes da coluna ser removida).
+      UI: seletor de Responsável na CardDetailModal virou multi-toggle
+      (mesmo padrão do seletor de Etiquetas), e o card fechado mostra um
+      "avatar stack" (avatares sobrepostos) em vez de um avatar só.
+- [ ] Busca de texto (título/descrição) nos cards do board inteiro —
+      hoje só existe filtro por etiqueta/status na aba "Por etiqueta".
+- [ ] Cor ou capa no card, além da etiqueta (que hoje é só uma barra
+      fininha) — mais escaneabilidade visual no quadro.
+- [ ] Atalhos de teclado básicos (novo card, foco na busca, etc.).
+- [ ] Soltar arquivo direto na área de anexos do card (hoje precisa
+      clicar no ícone primeiro).
+
+### Médio porte (feature de verdade, algumas sessões)
+
+- [ ] Notificações in-app (sino no header): atribuíram um card a você,
+      comentaram num card seu, ou te mencionaram (`@nome`) — reaproveita
+      a infra de socket que já existe.
+- [ ] "Meus cards": visão que junta os cards atribuídos a você em
+      **todos** os boards, não só dentro de um board.
+- [ ] Menções (`@nome`) em comentários.
+- [ ] Ações em lote: selecionar múltiplos cards e mover/etiquetar/
+      excluir em conjunto.
+- [ ] Markdown básico (negrito/lista/link) em descrição e comentários —
+      hoje é texto puro.
+- [ ] Lembrete de prazo (e-mail ou notificação in-app perto do
+      `dueDate`).
+
+### Maior porte (arquitetura nova, projeto próprio)
+
+- [ ] Views alternativas do board: calendário (por `dueDate`) ou
+      tabela/planilha, além do Kanban.
+- [ ] Templates de **board** (não de card): escolher um ponto de
+      partida ao criar ("Sprint", "Pessoal", "Bugs") já vindo com
+      listas/etiquetas padrão.
+- [ ] Responsividade mobile de verdade — o drag-and-drop atual não foi
+      pensado pra touch; dnd-kit suporta, mas o layout inteiro precisa
+      de revisão.
+- [ ] Campos customizados por board (prioridade, estimativa, etc.).
