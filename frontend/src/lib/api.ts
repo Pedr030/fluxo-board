@@ -193,7 +193,7 @@ export interface CardItem {
   completed: boolean;
   labelIds: string[];
   checklistItems: ChecklistItem[];
-  assignee: { id: string; name: string; avatarUrl: string | null } | null;
+  assigneeIds: string[];
 }
 
 export interface ListItem {
@@ -308,7 +308,6 @@ export const updateCard = (
     description?: string | null;
     dueDate?: string | null;
     completed?: boolean;
-    assigneeId?: string | null;
   }
 ) =>
   apiFetch<{ card: CardItem }>(`/cards/${cardId}`, {
@@ -321,6 +320,15 @@ export const deleteCard = (cardId: string) =>
 
 export const duplicateCard = (cardId: string) =>
   apiFetch<{ card: CardItem }>(`/cards/${cardId}/duplicate`, { method: "POST" });
+
+export const assignMember = (cardId: string, userId: string) =>
+  apiFetch<void>(`/cards/${cardId}/assignees`, {
+    method: "POST",
+    body: JSON.stringify({ userId }),
+  });
+
+export const unassignMember = (cardId: string, userId: string) =>
+  apiFetch<void>(`/cards/${cardId}/assignees/${userId}`, { method: "DELETE" });
 
 export const inviteMember = (boardId: string, email: string) =>
   apiFetch<{ member: Member }>(`/boards/${boardId}/invite`, {

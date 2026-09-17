@@ -510,6 +510,30 @@ export function Board({ boardId }: { boardId: string }) {
       );
     }
 
+    function handleCardAssigneeAdded({ cardId, userId }: { cardId: string; userId: string }) {
+      setLists((prev) =>
+        prev.map((list) => ({
+          ...list,
+          cards: list.cards.map((c) =>
+            c.id === cardId && !c.assigneeIds.includes(userId)
+              ? { ...c, assigneeIds: [...c.assigneeIds, userId] }
+              : c
+          ),
+        }))
+      );
+    }
+
+    function handleCardAssigneeRemoved({ cardId, userId }: { cardId: string; userId: string }) {
+      setLists((prev) =>
+        prev.map((list) => ({
+          ...list,
+          cards: list.cards.map((c) =>
+            c.id === cardId ? { ...c, assigneeIds: c.assigneeIds.filter((id) => id !== userId) } : c
+          ),
+        }))
+      );
+    }
+
     function handleChecklistItemCreated({ item, cardId }: { item: ChecklistItem; cardId: string }) {
       setLists((prev) =>
         prev.map((list) => ({
@@ -591,6 +615,8 @@ export function Board({ boardId }: { boardId: string }) {
     socket.on("label:deleted", handleLabelDeleted);
     socket.on("card:label-added", handleCardLabelAdded);
     socket.on("card:label-removed", handleCardLabelRemoved);
+    socket.on("card:assignee-added", handleCardAssigneeAdded);
+    socket.on("card:assignee-removed", handleCardAssigneeRemoved);
     socket.on("checklist-item:created", handleChecklistItemCreated);
     socket.on("checklist-item:updated", handleChecklistItemUpdated);
     socket.on("checklist-item:deleted", handleChecklistItemDeleted);
@@ -614,6 +640,8 @@ export function Board({ boardId }: { boardId: string }) {
       socket.off("label:deleted", handleLabelDeleted);
       socket.off("card:label-added", handleCardLabelAdded);
       socket.off("card:label-removed", handleCardLabelRemoved);
+      socket.off("card:assignee-added", handleCardAssigneeAdded);
+      socket.off("card:assignee-removed", handleCardAssigneeRemoved);
       socket.off("checklist-item:created", handleChecklistItemCreated);
       socket.off("checklist-item:updated", handleChecklistItemUpdated);
       socket.off("checklist-item:deleted", handleChecklistItemDeleted);

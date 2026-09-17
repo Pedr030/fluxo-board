@@ -20,15 +20,16 @@ export async function getBoardMembership(
   });
 }
 
-// Um membro "restricted" só edita/move/exclui cards atribuídos a ele
-// (ou sem responsável nenhum — livres pra qualquer um pegar). ADMIN/OWNER
-// e membros não-restritos passam sempre — essa checagem só existe pra
-// bloquear MEMBER restrito mexendo no card de outra pessoa.
+// Um membro "restricted" só edita/move/exclui cards atribuídos a ele (ou
+// sem responsável nenhum — livres pra qualquer um pegar; "atribuído" aqui
+// é "entre os responsáveis", já que um card pode ter mais de um). ADMIN/
+// OWNER e membros não-restritos passam sempre — essa checagem só existe
+// pra bloquear MEMBER restrito mexendo no card de outra pessoa.
 export function canEditCard(
   membership: Pick<BoardMember, "restricted">,
-  card: { assigneeId: string | null },
+  card: { assignees: { userId: string }[] },
   userId: string
 ): boolean {
   if (!membership.restricted) return true;
-  return card.assigneeId === null || card.assigneeId === userId;
+  return card.assignees.length === 0 || card.assignees.some((a) => a.userId === userId);
 }

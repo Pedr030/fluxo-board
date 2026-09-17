@@ -68,11 +68,12 @@ Já implementado em `backend/prisma/schema.prisma`. Resumo:
 | `Board` | title, ownerId | tem várias `List` |
 | `BoardMember` | boardId, userId, role (OWNER/ADMIN/MEMBER), restricted | liga User↔Board (N:N com atributo). `restricted` é uma dimensão separada do cargo: um MEMBER restrito só edita/move/exclui cards atribuídos a ele mesmo (ou sem responsável) — promover a ADMIN sempre limpa a flag |
 | `List` | title, position, boardId, isTemplatesList | tem vários `Card`. `isTemplatesList` marca a lista oculta de modelos (no máximo uma por board, criada sob demanda no primeiro `POST /boards/:id/templates`) — excluída de todo cálculo de posição das listas normais e nunca aparece no Quadro/Por etiqueta |
-| `Card` | title, description, position, listId, creatorId, assigneeId, dueDate, completed | pertence a uma `List` |
+| `Card` | title, description, position, listId, creatorId, dueDate, completed | pertence a uma `List`, tem vários responsáveis via `CardAssignee` |
 | `Comment` | text, cardId, authorId, createdAt | pertence a um `Card` |
 | `Attachment` | cardId, uploaderId, filename, mimeType, size, url, createdAt | pertence a um `Card` |
 | `Label` | boardId, name, color | pertence a um `Board`, paleta compartilhada |
 | `CardLabel` | cardId, labelId | tabela de junção N:N Card↔Label |
+| `CardAssignee` | cardId, userId | tabela de junção N:N Card↔User (responsáveis) — um card pode ter mais de uma pessoa (ex: tarefa feita em dupla) |
 | `ChecklistItem` | cardId, text, done, position | pertence a um `Card` (um card, uma checklist só) |
 | `Activity` | boardId, userId, summary, createdAt | pertence a um `Board` — não referencia Card/List (é um retrato congelado, não uma junção viva) |
 
@@ -108,7 +109,9 @@ Todas as rotas abaixo (exceto `/auth/*`) exigem header
 | PATCH | `/lists/:id` | renomeia (`{ title }`) ou reordena (`{ position }`) lista |
 | DELETE | `/lists/:id` | remove lista (e os cards dela, em cascata) |
 | POST | `/lists/:id/cards` | cria card `{ title }` **ou** `{ fromTemplateId }` (exatamente um dos dois) — o segundo copia título/descrição/etiquetas/checklist de um modelo (ver `/boards/:id/templates`) pro fim da lista; aberto a qualquer membro, mesmo restrito |
-| PATCH | `/cards/:id` | edita/move card `{ title?, description?, listId?, position?, dueDate?, completed?, assigneeId? }` — `assigneeId` precisa ser membro do board (400 senão); 403 se quem chama é um membro restrito mexendo num card atribuído a outra pessoa |
+| PATCH | `/cards/:id` | edita/move card `{ title?, description?, listId?, position?, dueDate?, completed? }` — 403 se quem chama é um membro restrito mexendo num card atribuído a outra pessoa (responsáveis não entram aqui, ver `/cards/:id/assignees` abaixo) |
+| POST | `/cards/:id/assignees` | atribui um membro do board ao card `{ userId }` — idempotente, mesmo padrão de `/cards/:id/labels`; um card aceita mais de um responsável; `userId` precisa ser membro do board (400 senão); mesma regra de 403 pra membro restrito |
+| DELETE | `/cards/:id/assignees/:userId` | remove um responsável do card |
 | DELETE | `/cards/:id` | remove card — mesma regra de 403 acima pra membro restrito |
 | POST | `/cards/:id/duplicate` | duplica o card (título+"(cópia)", descrição, etiquetas, checklist desmarcada) logo depois do original, na mesma lista — aberto a qualquer membro, mesmo restrito (emite `card:created`, não um evento próprio) |
 | POST | `/boards/:id/templates` | cria um modelo `{ title }` — é um `Card` numa lista especial oculta (`List.isTemplatesList`, título "Modelos", criada sob demanda na primeira chamada); não aparece no Quadro/Por etiqueta, não gera `Activity`; aberto a qualquer membro (emite `card:created`, e `list:created` só na primeira vez que a lista é criada) |
@@ -323,6 +326,18 @@ o que falta pro app em si, priorizado por esforço, não por importância.
       janelinha com os modelos disponíveis (cria direto) ou "criar em
       branco" (pede só o título, cria, e já abre o `CardDetailModal`
       completo — em vez de só digitar um nome e pronto).
+- [x] **Múltiplos responsáveis por card** — `assigneeId` (único) virou
+      `CardAssignee` (N:N, ver seção 3): tarefa feita em dupla precisa
+      de mais de uma pessoa atribuída. Endpoints dedicados
+      `POST`/`DELETE /cards/:id/assignees` (mesmo padrão de etiqueta —
+      idempotente, um por vez), em vez de continuar no `PATCH /cards/:id`
+      genérico. `canEditCard` (regra do membro restrito) passa a checar
+      "está entre os responsáveis", não mais "é o responsável único".
+      Migração preserva os dados existentes (cada `assigneeId` antigo
+      virou uma linha em `CardAssignee` antes da coluna ser removida).
+      UI: seletor de Responsável na CardDetailModal virou multi-toggle
+      (mesmo padrão do seletor de Etiquetas), e o card fechado mostra um
+      "avatar stack" (avatares sobrepostos) em vez de um avatar só.
 - [ ] Busca de texto (título/descrição) nos cards do board inteiro —
       hoje só existe filtro por etiqueta/status na aba "Por etiqueta".
 - [ ] Cor ou capa no card, além da etiqueta (que hoje é só uma barra

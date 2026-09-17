@@ -20,16 +20,24 @@ const createCardSchema = z
     message: "Informe exatamente um entre title e fromTemplateId",
   });
 
-const assigneeSelect = { id: true, name: true, avatarUrl: true };
-
-// Card + cardLabels (join) -> card + labelIds (achatado). Usado sempre que
-// um endpoint devolve um card inteiro via socket — o evento substitui o
-// card por completo no estado do frontend (mesma regra de ouro do resto
-// do app), então esquecer de incluir labelIds aqui apagaria as etiquetas
-// da tela até o próximo reload, mesmo elas continuando no banco.
-function withLabelIds<T extends { cardLabels: { labelId: string }[] }>(card: T) {
-  const { cardLabels, ...rest } = card;
-  return { ...rest, labelIds: cardLabels.map((cl) => cl.labelId) };
+// Card + cardLabels/assignees (joins) -> card + labelIds/assigneeIds
+// (achatados). Usado sempre que um endpoint devolve um card inteiro via
+// socket — o evento substitui o card por completo no estado do frontend
+// (mesma regra de ouro do resto do app), então esquecer de incluir esses
+// campos aqui apagaria etiquetas/responsáveis da tela até o próximo
+// reload, mesmo eles continuando no banco. Só os ids (não nome/avatar):
+// o frontend já tem a lista de membros do board carregada, resolve os
+// dados de cada responsável cruzando com ela — mesmo princípio de
+// labelIds x a paleta de etiquetas do board.
+function serializeCard<
+  T extends { cardLabels: { labelId: string }[]; assignees: { userId: string }[] }
+>(card: T) {
+  const { cardLabels, assignees, ...rest } = card;
+  return {
+    ...rest,
+    labelIds: cardLabels.map((cl) => cl.labelId),
+    assigneeIds: assignees.map((a) => a.userId),
+  };
 }
 
 // Monta o pedaço de `data` do prisma.card.create que copia o conteúdo de
@@ -104,13 +112,13 @@ export async function createCard(req: AuthRequest, res: Response) {
     include: {
       cardLabels: { select: { labelId: true } },
       checklistItems: { orderBy: { position: "asc" } },
-      assignee: { select: assigneeSelect },
+      assignees: { select: { userId: true } },
     },
   });
-  const cardWithLabels = withLabelIds(card);
+  const serialized = serializeCard(card);
 
   const io = req.app.get("io") as Server;
-  io.to(list.boardId).emit("card:created", { card: cardWithLabels });
+  io.to(list.boardId).emit("card:created", { card: serialized });
   await logActivity(
     io,
     list.boardId,
@@ -120,7 +128,7 @@ export async function createCard(req: AuthRequest, res: Response) {
       : `criou o card "${card.title}" na lista "${list.title}"`
   );
 
-  return res.status(201).json({ card: cardWithLabels });
+  return res.status(201).json({ card: serialized });
 }
 
 function fetchTemplate(id: string) {
@@ -191,17 +199,17 @@ export async function duplicateCard(req: AuthRequest, res: Response) {
       include: {
         cardLabels: { select: { labelId: true } },
         checklistItems: { orderBy: { position: "asc" } },
-        assignee: { select: assigneeSelect },
+        assignees: { select: { userId: true } },
       },
     });
   });
-  const cardWithLabels = withLabelIds(created);
+  const serialized = serializeCard(created);
 
   const io = req.app.get("io") as Server;
-  io.to(list.boardId).emit("card:created", { card: cardWithLabels });
+  io.to(list.boardId).emit("card:created", { card: serialized });
   await logActivity(io, list.boardId, req.userId, `duplicou o card "${card.title}"`);
 
-  return res.status(201).json({ card: cardWithLabels });
+  return res.status(201).json({ card: serialized });
 }
 
 const createTemplateSchema = z.object({
@@ -245,10 +253,10 @@ export async function createTemplate(req: AuthRequest, res: Response) {
     include: {
       cardLabels: { select: { labelId: true } },
       checklistItems: { orderBy: { position: "asc" } },
-      assignee: { select: assigneeSelect },
+      assignees: { select: { userId: true } },
     },
   });
-  const cardWithLabels = withLabelIds(card);
+  const serialized = serializeCard(card);
 
   const io = req.app.get("io") as Server;
   // Só emite list:created na primeira vez (lista recém-criada) — emitir de
@@ -257,9 +265,9 @@ export async function createTemplate(req: AuthRequest, res: Response) {
   if (isNewList) {
     io.to(boardId).emit("list:created", { list: { ...templatesList, cards: [] } });
   }
-  io.to(boardId).emit("card:created", { card: cardWithLabels });
+  io.to(boardId).emit("card:created", { card: serialized });
 
-  return res.status(201).json({ card: cardWithLabels });
+  return res.status(201).json({ card: serialized });
 }
 
 const updateCardSchema = z.object({
@@ -275,34 +283,31 @@ const updateCardSchema = z.object({
       message: "Data inválida",
     }),
   completed: z.boolean().optional(),
-  assigneeId: z.string().nullable().optional(),
 });
 
 /**
- * PATCH /cards/:id  { title?, description?, listId?, position?, dueDate?, completed?, assigneeId? }
+ * PATCH /cards/:id  { title?, description?, listId?, position?, dueDate?, completed? }
  * Dois modos, mutuamente exclusivos por enquanto:
  *  - listId + position juntos: move o card (reindexa a(s) lista(s) — ver
  *    seção 3 do spec, posições inteiras 0..n-1 sem gaps).
- *  - title, description, dueDate, completed e/ou assigneeId: edita o
- *    conteúdo, sem mexer em posição.
+ *  - title, description, dueDate e/ou completed: edita o conteúdo, sem
+ *    mexer em posição.
+ * Responsáveis não entram aqui — ver assignMember/unassignMember, que
+ * seguem o mesmo padrão de attachLabel/detachLabel (um por vez, idempotente).
  */
 export async function updateCard(req: AuthRequest, res: Response) {
   const parsed = updateCardSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: parsed.error.flatten() });
   }
-  const {
-    title,
-    description,
-    listId: toListId,
-    position: toPosition,
-    dueDate,
-    completed,
-    assigneeId,
-  } = parsed.data;
+  const { title, description, listId: toListId, position: toPosition, dueDate, completed } =
+    parsed.data;
   const cardId = req.params.id;
 
-  const card = await prisma.card.findUnique({ where: { id: cardId } });
+  const card = await prisma.card.findUnique({
+    where: { id: cardId },
+    include: { assignees: { select: { userId: true } } },
+  });
   if (!card) {
     return res.status(404).json({ error: "Card não encontrado" });
   }
@@ -375,13 +380,13 @@ export async function updateCard(req: AuthRequest, res: Response) {
         include: {
           cardLabels: { select: { labelId: true } },
           checklistItems: { orderBy: { position: "asc" } },
-          assignee: { select: assigneeSelect },
+          assignees: { select: { userId: true } },
         },
       });
     });
-    const cardWithLabels = withLabelIds(updated);
+    const serialized = serializeCard(updated);
 
-    io.to(destList.boardId).emit("card:moved", { card: cardWithLabels, fromListId, toListId });
+    io.to(destList.boardId).emit("card:moved", { card: serialized, fromListId, toListId });
     // Só registra quando muda de lista — reordenar dentro da mesma lista
     // é ruído demais pro histórico (aconteceria a cada arrasto pequeno).
     if (fromListId !== toListId) {
@@ -392,23 +397,16 @@ export async function updateCard(req: AuthRequest, res: Response) {
         `moveu o card "${updated.title}" de "${sourceList.title}" para "${destList.title}"`
       );
     }
-    return res.json({ card: cardWithLabels });
+    return res.json({ card: serialized });
   }
 
   if (
     title === undefined &&
     description === undefined &&
     dueDate === undefined &&
-    completed === undefined &&
-    assigneeId === undefined
+    completed === undefined
   ) {
     return res.status(400).json({ error: "Nada para atualizar" });
-  }
-
-  if (assigneeId !== undefined && assigneeId !== null) {
-    if (!(await isBoardMember(sourceList.boardId, assigneeId))) {
-      return res.status(400).json({ error: "Esse usuário não é membro do board" });
-    }
   }
 
   const updated = await prisma.card.update({
@@ -418,25 +416,23 @@ export async function updateCard(req: AuthRequest, res: Response) {
       ...(description !== undefined ? { description } : {}),
       ...(dueDate !== undefined ? { dueDate: dueDate === null ? null : new Date(dueDate) } : {}),
       ...(completed !== undefined ? { completed } : {}),
-      ...(assigneeId !== undefined ? { assigneeId } : {}),
     },
     include: {
       cardLabels: { select: { labelId: true } },
       checklistItems: { orderBy: { position: "asc" } },
-      assignee: { select: assigneeSelect },
+      assignees: { select: { userId: true } },
     },
   });
-  const cardWithLabels = withLabelIds(updated);
+  const serialized = serializeCard(updated);
 
-  io.to(sourceList.boardId).emit("card:updated", { card: cardWithLabels });
-  // Só o toggle de concluído e mudar o responsável viram entrada no
-  // histórico — editar título/descrição/prazo é mudança de conteúdo, não
-  // um evento de ciclo de vida.
+  io.to(sourceList.boardId).emit("card:updated", { card: serialized });
+  // Só o toggle de concluído vira entrada no histórico aqui — editar
+  // título/descrição/prazo é mudança de conteúdo, não um evento de ciclo
+  // de vida. Mudar responsável é logado em assignMember/unassignMember.
   // Compara com o valor ANTES do update (`card`, buscado no começo da
-  // função), não só se o campo veio na requisição — clicar de novo no
-  // mesmo responsável (ou marcar/desmarcar clicando duas vezes rápido)
-  // manda o campo igual ao que já era, e isso não é uma mudança de
-  // verdade pro histórico.
+  // função), não só se o campo veio na requisição — marcar/desmarcar
+  // clicando duas vezes rápido manda o campo igual ao que já era, e isso
+  // não é uma mudança de verdade pro histórico.
   if (completed !== undefined && completed !== card.completed) {
     await logActivity(
       io,
@@ -447,17 +443,7 @@ export async function updateCard(req: AuthRequest, res: Response) {
         : `reabriu o card "${updated.title}"`
     );
   }
-  if (assigneeId !== undefined && assigneeId !== card.assigneeId) {
-    await logActivity(
-      io,
-      sourceList.boardId,
-      req.userId,
-      assigneeId === null
-        ? `removeu a atribuição do card "${updated.title}"`
-        : `atribuiu o card "${updated.title}" a ${updated.assignee?.name}`
-    );
-  }
-  return res.json({ card: cardWithLabels });
+  return res.json({ card: serialized });
 }
 
 /**
@@ -469,7 +455,10 @@ export async function updateCard(req: AuthRequest, res: Response) {
 export async function deleteCard(req: AuthRequest, res: Response) {
   const cardId = req.params.id;
 
-  const card = await prisma.card.findUnique({ where: { id: cardId } });
+  const card = await prisma.card.findUnique({
+    where: { id: cardId },
+    include: { assignees: { select: { userId: true } } },
+  });
   if (!card) {
     return res.status(404).json({ error: "Card não encontrado" });
   }
@@ -513,6 +502,119 @@ export async function deleteCard(req: AuthRequest, res: Response) {
   const io = req.app.get("io") as Server;
   io.to(list.boardId).emit("card:deleted", { cardId, listId: card.listId });
   await logActivity(io, list.boardId, req.userId, `excluiu o card "${card.title}"`);
+
+  return res.status(204).send();
+}
+
+const assignMemberSchema = z.object({
+  userId: z.string().min(1),
+});
+
+/**
+ * POST /cards/:id/assignees  { userId }
+ * Atribui um membro do board ao card — um card pode ter vários
+ * responsáveis (ex: tarefa feita em dupla). Idempotente, mesmo padrão de
+ * attachLabel: se já estava atribuído, só devolve sucesso sem duplicar.
+ * Diferente de etiqueta/checklist (sempre abertos a qualquer membro),
+ * segue a mesma regra de canEditCard que title/description/etc: um
+ * membro restrito só atribui alguém a um card que já é dele (ou livre).
+ */
+export async function assignMember(req: AuthRequest, res: Response) {
+  const parsed = assignMemberSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
+  const cardId = req.params.id;
+  const { userId } = parsed.data;
+
+  const card = await prisma.card.findUnique({
+    where: { id: cardId },
+    include: { assignees: { select: { userId: true } } },
+  });
+  if (!card) {
+    return res.status(404).json({ error: "Card não encontrado" });
+  }
+  const list = await prisma.list.findUnique({ where: { id: card.listId } });
+  if (!list) {
+    return res.status(404).json({ error: "Lista não encontrada" });
+  }
+  const membership = await getBoardMembership(list.boardId, req.userId!);
+  if (!membership) {
+    return res.status(403).json({ error: "Você não é membro deste board" });
+  }
+  if (!canEditCard(membership, card, req.userId!)) {
+    return res.status(403).json({ error: "Esse card está atribuído a outra pessoa" });
+  }
+  if (!(await isBoardMember(list.boardId, userId))) {
+    return res.status(400).json({ error: "Esse usuário não é membro do board" });
+  }
+
+  const alreadyAssigned = card.assignees.some((a) => a.userId === userId);
+  if (!alreadyAssigned) {
+    await prisma.cardAssignee.create({ data: { cardId, userId } });
+  }
+
+  const io = req.app.get("io") as Server;
+  io.to(list.boardId).emit("card:assignee-added", { cardId, userId });
+  if (!alreadyAssigned) {
+    const assignedUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    await logActivity(
+      io,
+      list.boardId,
+      req.userId,
+      `atribuiu o card "${card.title}" a ${assignedUser?.name ?? "alguém"}`
+    );
+  }
+
+  return res.status(204).send();
+}
+
+/**
+ * DELETE /cards/:id/assignees/:userId
+ */
+export async function unassignMember(req: AuthRequest, res: Response) {
+  const cardId = req.params.id;
+  const userId = req.params.userId;
+
+  const card = await prisma.card.findUnique({
+    where: { id: cardId },
+    include: { assignees: { select: { userId: true } } },
+  });
+  if (!card) {
+    return res.status(404).json({ error: "Card não encontrado" });
+  }
+  const list = await prisma.list.findUnique({ where: { id: card.listId } });
+  if (!list) {
+    return res.status(404).json({ error: "Lista não encontrada" });
+  }
+  const membership = await getBoardMembership(list.boardId, req.userId!);
+  if (!membership) {
+    return res.status(403).json({ error: "Você não é membro deste board" });
+  }
+  if (!canEditCard(membership, card, req.userId!)) {
+    return res.status(403).json({ error: "Esse card está atribuído a outra pessoa" });
+  }
+
+  const wasAssigned = card.assignees.some((a) => a.userId === userId);
+  await prisma.cardAssignee.deleteMany({ where: { cardId, userId } });
+
+  const io = req.app.get("io") as Server;
+  io.to(list.boardId).emit("card:assignee-removed", { cardId, userId });
+  if (wasAssigned) {
+    const removedUser = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true },
+    });
+    await logActivity(
+      io,
+      list.boardId,
+      req.userId,
+      `removeu ${removedUser?.name ?? "alguém"} da atribuição do card "${card.title}"`
+    );
+  }
 
   return res.status(204).send();
 }

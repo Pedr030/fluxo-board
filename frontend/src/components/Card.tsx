@@ -24,7 +24,7 @@ export interface CardData {
   completed: boolean;
   labelIds: string[];
   checklistItems: ChecklistItem[];
-  assignee: { id: string; name: string; avatarUrl: string | null } | null;
+  assigneeIds: string[];
 }
 
 /**
@@ -44,18 +44,19 @@ export function isCardOverdue(card: Pick<CardData, "dueDate" | "completed">): bo
 /**
  * Espelha a checagem do backend (`canEditCard` em authorization.ts): um
  * membro "restricted" só edita/move/exclui cards atribuídos a ele mesmo
- * (ou sem responsável nenhum — livres pra pegar). Usado só pra já
+ * (ou sem responsável nenhum — livres pra pegar; "atribuído" é "entre os
+ * responsáveis", já que um card pode ter mais de um). Usado só pra já
  * esconder/desabilitar os controles certos na tela — o backend reforça
  * de qualquer forma, isso aqui é só pra não deixar a pessoa tentar algo
  * que vai voltar 403.
  */
 export function canEditCard(
-  card: Pick<CardData, "assignee">,
+  card: Pick<CardData, "assigneeIds">,
   currentUserId: string | null,
   restricted: boolean
 ): boolean {
   if (!restricted) return true;
-  return card.assignee === null || card.assignee.id === currentUserId;
+  return card.assigneeIds.length === 0 || (currentUserId !== null && card.assigneeIds.includes(currentUserId));
 }
 
 function todayDateString(): string {
@@ -96,9 +97,20 @@ export function CardView({ card }: { card: CardData }) {
  * Corpo visual do card (pills de etiqueta + título + prévia da descrição)
  * — usado tanto pelo `Card` arrastável (dentro de uma lista) quanto pelo
  * `CardTile` estático (aba "Por etiqueta", que agrupa por etiqueta em vez
- * de por lista e por isso não usa dnd-kit).
+ * de por lista e por isso não usa dnd-kit). `members` resolve nome/avatar
+ * de cada responsável a partir do id (mesmo princípio de `labelIds` x a
+ * paleta de etiquetas do board): passa `[]` de onde não existe conceito
+ * de responsável (ex: modelo de card).
  */
-export function CardBody({ card, labels }: { card: CardData; labels: Label[] }) {
+export function CardBody({
+  card,
+  labels,
+  members = [],
+}: {
+  card: CardData;
+  labels: Label[];
+  members?: Member[];
+}) {
   return (
     <>
       {card.labelIds.length > 0 && (
@@ -119,10 +131,22 @@ export function CardBody({ card, labels }: { card: CardData; labels: Label[] }) 
       )}
       <div className="flex items-start justify-between gap-2">
         <p className="min-w-0 flex-1">{card.title}</p>
-        {card.assignee && (
-          <span title={`Responsável: ${card.assignee.name}`} className="shrink-0">
-            <Avatar name={card.assignee.name} avatarUrl={card.assignee.avatarUrl} className="h-6 w-6 text-xs" />
-          </span>
+        {card.assigneeIds.length > 0 && (
+          <div className="flex shrink-0 -space-x-2">
+            {card.assigneeIds.map((id) => {
+              const assignee = members.find((m) => m.user.id === id)?.user;
+              if (!assignee) return null;
+              return (
+                <span
+                  key={id}
+                  title={`Responsável: ${assignee.name}`}
+                  className="rounded-full ring-2 ring-surface"
+                >
+                  <Avatar name={assignee.name} avatarUrl={assignee.avatarUrl} className="h-6 w-6 text-xs" />
+                </span>
+              );
+            })}
+          </div>
         )}
       </div>
       {card.description && (
@@ -256,7 +280,7 @@ export function Card({
             card.completed ? "opacity-50" : ""
           }`}
         >
-          <CardBody card={card} labels={labels} />
+          <CardBody card={card} labels={labels} members={members} />
         </div>
       </div>
       {editable && (

@@ -7,6 +7,7 @@ import {
   Comment,
   Label,
   Member,
+  assignMember as apiAssignMember,
   attachLabel as apiAttachLabel,
   createAttachment as apiCreateAttachment,
   createChecklistItem as apiCreateChecklistItem,
@@ -20,6 +21,7 @@ import {
   getMe,
   listAttachments,
   listComments,
+  unassignMember as apiUnassignMember,
   updateCard as apiUpdateCard,
   updateChecklistItem as apiUpdateChecklistItem,
 } from "@/lib/api";
@@ -318,12 +320,14 @@ export function CardDetailModal({
     }
   }
 
-  async function handleChangeAssignee(userId: string | null) {
-    setAssigneePickerOpen(false);
-    if (userId === (card.assignee?.id ?? null)) return;
+  async function handleToggleAssignee(userId: string) {
     setAssigneeError(null);
     try {
-      await apiUpdateCard(card.id, { assigneeId: userId });
+      if (card.assigneeIds.includes(userId)) {
+        await apiUnassignMember(card.id, userId);
+      } else {
+        await apiAssignMember(card.id, userId);
+      }
     } catch {
       setAssigneeError("Não foi possível atualizar o responsável.");
     }
@@ -496,21 +500,29 @@ export function CardDetailModal({
           </div>
 
           <div className="relative flex flex-col gap-1.5">
-            <h3 className="text-sm font-medium text-ink-soft">Responsável</h3>
+            <h3 className="text-sm font-medium text-ink-soft">Responsáveis</h3>
             <button
               type="button"
               disabled={!canEdit}
               onClick={() => setAssigneePickerOpen((v) => !v)}
               className="flex w-fit items-center gap-2 rounded-card border border-surface-border bg-surface px-2 py-1.5 text-sm text-ink transition-colors hover:border-brand-400 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:border-surface-border"
             >
-              {card.assignee ? (
+              {card.assigneeIds.length > 0 ? (
                 <>
-                  <Avatar
-                    name={card.assignee.name}
-                    avatarUrl={card.assignee.avatarUrl}
-                    className="h-6 w-6 text-xs"
-                  />
-                  {card.assignee.name}
+                  <div className="flex -space-x-2">
+                    {card.assigneeIds.map((id) => {
+                      const assignee = members.find((m) => m.user.id === id)?.user;
+                      if (!assignee) return null;
+                      return (
+                        <span key={id} className="rounded-full ring-2 ring-surface">
+                          <Avatar name={assignee.name} avatarUrl={assignee.avatarUrl} className="h-6 w-6 text-xs" />
+                        </span>
+                      );
+                    })}
+                  </div>
+                  {card.assigneeIds.length === 1
+                    ? members.find((m) => m.user.id === card.assigneeIds[0])?.user.name
+                    : `${card.assigneeIds.length} pessoas`}
                 </>
               ) : (
                 <span className="text-ink-soft">Ninguém atribuído</span>
@@ -528,12 +540,12 @@ export function CardDetailModal({
                   <p className="mb-2 text-xs font-medium text-ink-soft">Membros do board</p>
                   <div className="flex max-h-40 flex-col gap-1 overflow-y-auto">
                     {members.map((m) => {
-                      const active = card.assignee?.id === m.user.id;
+                      const active = card.assigneeIds.includes(m.user.id);
                       return (
                         <button
                           key={m.id}
                           type="button"
-                          onClick={() => handleChangeAssignee(m.user.id)}
+                          onClick={() => handleToggleAssignee(m.user.id)}
                           className={`flex items-center gap-2 rounded-card px-2 py-1.5 text-left text-sm transition-colors ${
                             active ? "bg-surface-border/50" : "hover:bg-surface-border/30"
                           }`}
@@ -545,15 +557,6 @@ export function CardDetailModal({
                       );
                     })}
                   </div>
-                  {card.assignee && (
-                    <button
-                      type="button"
-                      onClick={() => handleChangeAssignee(null)}
-                      className="mt-2 w-full rounded-card px-2 py-1.5 text-left text-sm text-red-600 transition-colors hover:bg-red-500/10 dark:text-red-400"
-                    >
-                      Remover atribuição
-                    </button>
-                  )}
                 </div>
               </>
             )}

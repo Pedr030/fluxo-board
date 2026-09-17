@@ -72,7 +72,7 @@ export function CardTile({
           card.completed ? "opacity-50" : ""
         }`}
       >
-        <CardBody card={card} labels={labels} />
+        <CardBody card={card} labels={labels} members={members} />
       </div>
       {editable && (
         <>

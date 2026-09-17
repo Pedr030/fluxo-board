@@ -10,7 +10,7 @@ function card(id: string): CardData {
     completed: false,
     labelIds: [],
     checklistItems: [],
-    assignee: null,
+    assigneeIds: [],
   };
 }
 

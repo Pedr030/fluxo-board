@@ -96,7 +96,7 @@ export async function getBoard(req: AuthRequest, res: Response) {
             include: {
               cardLabels: { select: { labelId: true } },
               checklistItems: { orderBy: { position: "asc" } },
-              assignee: { select: { id: true, name: true, avatarUrl: true } },
+              assignees: { select: { userId: true } },
             },
           },
         },
@@ -123,9 +123,10 @@ export async function getBoard(req: AuthRequest, res: Response) {
 
   const lists = board.lists.map((list) => ({
     ...list,
-    cards: list.cards.map(({ cardLabels, ...card }) => ({
+    cards: list.cards.map(({ cardLabels, assignees, ...card }) => ({
       ...card,
       labelIds: cardLabels.map((cl) => cl.labelId),
+      assigneeIds: assignees.map((a) => a.userId),
     })),
   }));
 
