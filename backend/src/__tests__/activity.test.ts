@@ -37,11 +37,26 @@ async function createCard(token: string, listId: string, title: string) {
   return res.body.card.id as string;
 }
 
-async function getActivity(token: string, boardId: string) {
+async function getActivity(token: string, boardId: string, page?: number) {
   const res = await request(app)
     .get(`/boards/${boardId}/activity`)
+    .query(page ? { page } : {})
     .set("Authorization", `Bearer ${token}`);
   return res.body.activities as { summary: string; user: { name: string } | null }[];
+}
+
+async function getActivityPage(token: string, boardId: string, page?: number) {
+  const res = await request(app)
+    .get(`/boards/${boardId}/activity`)
+    .query(page ? { page } : {})
+    .set("Authorization", `Bearer ${token}`);
+  return res.body as {
+    activities: { id: string; summary: string }[];
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    totalPages: number;
+  };
 }
 
 describe("Histórico de atividade", () => {
@@ -175,5 +190,78 @@ describe("Histórico de atividade", () => {
       .get(`/boards/${boardId}/activity`)
       .set("Authorization", `Bearer ${tokenOutsider}`);
     expect(res.status).toBe(403);
+  });
+
+  describe("paginação por página numerada (offset)", () => {
+    it("com 50 entradas ou menos, cabe tudo na página 1 e totalPages é 1", async () => {
+      const token = await registerUser("dona@teste.com");
+      const boardId = await createBoard(token);
+      const listId = await createList(token, boardId, "Lista");
+      for (let i = 0; i < 49; i++) {
+        await createCard(token, listId, `Card ${i}`);
+      }
+      // 49 cards + 1 lista = 50 entradas de atividade.
+
+      const page = await getActivityPage(token, boardId);
+      expect(page.activities).toHaveLength(50);
+      expect(page.page).toBe(1);
+      expect(page.totalCount).toBe(50);
+      expect(page.totalPages).toBe(1);
+    });
+
+    it("com mais de 50 entradas, divide em páginas sem pular nem repetir nenhuma", async () => {
+      const token = await registerUser("dona@teste.com");
+      const boardId = await createBoard(token);
+      const listId = await createList(token, boardId, "Lista");
+      for (let i = 0; i < 60; i++) {
+        await createCard(token, listId, `Card ${i}`);
+      }
+      // 60 cards + 1 lista = 61 entradas de atividade.
+
+      const firstPage = await getActivityPage(token, boardId);
+      expect(firstPage.activities).toHaveLength(50);
+      expect(firstPage.totalCount).toBe(61);
+      expect(firstPage.totalPages).toBe(2);
+
+      const secondPage = await getActivityPage(token, boardId, 2);
+      expect(secondPage.activities).toHaveLength(11);
+      expect(secondPage.totalPages).toBe(2);
+
+      const allIds = [...firstPage.activities, ...secondPage.activities].map((a) => a.id);
+      expect(new Set(allIds).size).toBe(61);
+
+      // Mais recente primeiro, sem furo entre as páginas: a entrada mais
+      // antiga de todas (criar a lista, o primeiro evento do board) é a
+      // última da última página.
+      expect(secondPage.activities[secondPage.activities.length - 1].summary).toBe(
+        'criou a lista "Lista"'
+      );
+    });
+
+    it("página fora do intervalo devolve lista vazia, sem erro", async () => {
+      const token = await registerUser("dona@teste.com");
+      const boardId = await createBoard(token);
+      await createList(token, boardId, "Lista");
+
+      const page = await getActivityPage(token, boardId, 99);
+      expect(page.activities).toHaveLength(0);
+      expect(page.totalCount).toBe(1);
+      expect(page.totalPages).toBe(1);
+    });
+
+    it("página inválida (0, negativa ou não numérica) cai pra página 1", async () => {
+      const token = await registerUser("dona@teste.com");
+      const boardId = await createBoard(token);
+      await createList(token, boardId, "Lista");
+
+      for (const raw of [0, -1, "abc"]) {
+        const res = await request(app)
+          .get(`/boards/${boardId}/activity`)
+          .query({ page: raw })
+          .set("Authorization", `Bearer ${token}`);
+        expect(res.body.page).toBe(1);
+        expect(res.body.activities).toHaveLength(1);
+      }
+    });
   });
 });

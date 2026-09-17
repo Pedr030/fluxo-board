@@ -294,8 +294,14 @@ export const updateMember = (
     body: JSON.stringify(data),
   });
 
-export const listActivity = (boardId: string) =>
-  apiFetch<{ activities: Activity[] }>(`/boards/${boardId}/activity`);
+export const listActivity = (boardId: string, page = 1) =>
+  apiFetch<{
+    activities: Activity[];
+    page: number;
+    pageSize: number;
+    totalCount: number;
+    totalPages: number;
+  }>(`/boards/${boardId}/activity?page=${page}`);
 
 export const getMe = () => apiFetch<{ user: User }>("/me");
 

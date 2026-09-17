@@ -64,6 +64,31 @@ interface PresenceUser {
 // seção "Presença" (os três avatares de exemplo usam brand/flow/signal).
 const AVATAR_COLORS = ["bg-brand-500", "bg-flow-500", "bg-accent-500"];
 
+// Tem que bater com PAGE_SIZE de activity.controller.ts — usado só pra
+// aparar localmente a página 1 quando activity:created chega ao vivo
+// (ver handleActivityCreated), sem precisar buscar de novo no servidor.
+const ACTIVITY_PAGE_SIZE = 50;
+
+/**
+ * Números de página pra desenhar a barra de paginação da aba Atividade,
+ * com reticências quando há muitas páginas — sempre mostra a 1ª, a
+ * última, e uma janela em volta da página atual, em vez de uma barra
+ * gigante quando o histórico tem dezenas de páginas.
+ */
+export function getActivityPageNumbers(current: number, total: number): (number | "…")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const keep = new Set([1, 2, total - 1, total, current - 1, current, current + 1]);
+  const sorted = [...keep].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
+  const result: (number | "…")[] = [];
+  let prev = 0;
+  for (const p of sorted) {
+    if (prev && p - prev > 1) result.push("…");
+    result.push(p);
+    prev = p;
+  }
+  return result;
+}
+
 function formatActivityTime(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR", {
     day: "2-digit",
@@ -73,7 +98,7 @@ function formatActivityTime(iso: string): string {
   });
 }
 
-function moveCardInLists(
+export function moveCardInLists(
   lists: ListData[],
   cardId: string,
   toListId: string,
@@ -268,10 +293,18 @@ export function Board({ boardId }: { boardId: string }) {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [activitiesLoading, setActivitiesLoading] = useState(false);
   const [activitiesError, setActivitiesError] = useState<string | null>(null);
+  const [activitiesPage, setActivitiesPage] = useState(1);
+  const [activitiesTotalPages, setActivitiesTotalPages] = useState(1);
+  const [activitiesTotalCount, setActivitiesTotalCount] = useState(0);
   // Ref (não state) porque é lido dentro do listener de socket registrado
   // no efeito principal (deps [boardId]) — um state aqui ficaria "preso"
   // no valor de quando o efeito rodou, sem ver a atualização.
   const activitiesLoadedRef = useRef(false);
+  // Mesmo motivo: o socket precisa saber em qual página a pessoa está
+  // agora (não a de quando o efeito montou) pra decidir se uma atividade
+  // nova entra na lista visível (só faz sentido na página 1, a mais
+  // recente) ou só atualiza a contagem de páginas.
+  const activitiesPageRef = useRef(1);
   // Mesmo motivo do activitiesLoadedRef acima: lido dentro do listener de
   // socket (deps [boardId]), então precisa ser ref pra não ficar preso no
   // valor (null) de quando o efeito montou, antes do getMe() resolver.
@@ -497,11 +530,21 @@ export function Board({ boardId }: { boardId: string }) {
     }
 
     function handleActivityCreated({ activity }: { activity: Activity }) {
-      // Só prepende se a lista já tiver sido carregada (aba de Atividade
-      // aberta ao menos uma vez) — senão fica um histórico incompleto até
-      // a próxima abertura buscar tudo via REST de qualquer forma.
+      // Só reage se a aba de Atividade já tiver sido aberta ao menos uma
+      // vez — senão fica um histórico incompleto até a próxima abertura
+      // buscar tudo via REST de qualquer forma.
       if (!activitiesLoadedRef.current) return;
-      setActivities((prev) => [activity, ...prev]);
+      setActivitiesTotalCount((prev) => {
+        const next = prev + 1;
+        setActivitiesTotalPages(Math.max(1, Math.ceil(next / ACTIVITY_PAGE_SIZE)));
+        return next;
+      });
+      // Só a página 1 (a mais recente) muda de conteúdo com uma entrada
+      // nova — quem está numa página mais antiga só vê a contagem de
+      // páginas mudar, sem a lista visível ser mexida por baixo dela.
+      if (activitiesPageRef.current === 1) {
+        setActivities((prev) => [activity, ...prev].slice(0, ACTIVITY_PAGE_SIZE));
+      }
     }
 
     socket.on("list:created", handleListCreated);
@@ -551,21 +594,36 @@ export function Board({ boardId }: { boardId: string }) {
     };
   }, [boardId]);
 
-  // Carrega o histórico só na primeira vez que a aba abre (mesma ideia de
+  // Carrega a página 1 só na primeira vez que a aba abre (mesma ideia de
   // comentários/anexos no modal do card) — depois disso, activity:created
-  // (sempre escutado, ver efeito acima) mantém a lista atualizada sozinha.
+  // (sempre escutado, ver efeito acima) mantém a contagem/página 1
+  // atualizada sozinha; trocar de página usa handleActivityPageChange.
   useEffect(() => {
     if (view !== "activity" || activitiesLoadedRef.current) return;
+    loadActivityPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, boardId]);
+
+  function loadActivityPage(page: number) {
     setActivitiesLoading(true);
     setActivitiesError(null);
-    listActivity(boardId)
+    listActivity(boardId, page)
       .then((res) => {
         setActivities(res.activities);
+        setActivitiesPage(res.page);
+        setActivitiesTotalPages(res.totalPages);
+        setActivitiesTotalCount(res.totalCount);
+        activitiesPageRef.current = res.page;
         activitiesLoadedRef.current = true;
       })
       .catch(() => setActivitiesError("Não foi possível carregar o histórico."))
       .finally(() => setActivitiesLoading(false));
-  }, [view, boardId]);
+  }
+
+  function handleActivityPageChange(page: number) {
+    if (page === activitiesPage || activitiesLoading) return;
+    loadActivityPage(page);
+  }
 
   async function handleCreateList(e: React.FormEvent) {
     e.preventDefault();
@@ -831,6 +889,12 @@ export function Board({ boardId }: { boardId: string }) {
           {!activitiesLoading && !activitiesError && activities.length === 0 && (
             <p className="text-sm text-ink-soft">Nenhuma atividade ainda.</p>
           )}
+          {activitiesTotalCount > 0 && (
+            <p className="mb-3 text-xs text-ink-soft">
+              {activitiesTotalCount} {activitiesTotalCount === 1 ? "atividade" : "atividades"} ao
+              todo
+            </p>
+          )}
           <ul className="flex flex-col gap-3">
             {activities.map((activity) => (
               <li key={activity.id} className="flex items-start gap-3">
@@ -849,6 +913,50 @@ export function Board({ boardId }: { boardId: string }) {
               </li>
             ))}
           </ul>
+          {activitiesTotalPages > 1 && (
+            <nav
+              aria-label="Páginas do histórico de atividade"
+              className="mt-4 flex flex-wrap items-center justify-center gap-1"
+            >
+              <button
+                onClick={() => handleActivityPageChange(activitiesPage - 1)}
+                disabled={activitiesPage === 1 || activitiesLoading}
+                aria-label="Página anterior"
+                className="rounded-card border border-surface-border px-2.5 py-1.5 text-sm text-ink-soft transition-colors hover:bg-surface-border/30 disabled:opacity-40"
+              >
+                ‹
+              </button>
+              {getActivityPageNumbers(activitiesPage, activitiesTotalPages).map((p, i) =>
+                p === "…" ? (
+                  <span key={`ellipsis-${i}`} className="px-1.5 text-sm text-ink-soft">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={p}
+                    onClick={() => handleActivityPageChange(p)}
+                    disabled={activitiesLoading}
+                    aria-current={p === activitiesPage ? "page" : undefined}
+                    className={`rounded-card px-3 py-1.5 text-sm font-medium transition-colors disabled:opacity-40 ${
+                      p === activitiesPage
+                        ? "bg-brand-500 text-white"
+                        : "border border-surface-border text-ink-soft hover:bg-surface-border/30"
+                    }`}
+                  >
+                    {p}
+                  </button>
+                )
+              )}
+              <button
+                onClick={() => handleActivityPageChange(activitiesPage + 1)}
+                disabled={activitiesPage === activitiesTotalPages || activitiesLoading}
+                aria-label="Próxima página"
+                className="rounded-card border border-surface-border px-2.5 py-1.5 text-sm text-ink-soft transition-colors hover:bg-surface-border/30 disabled:opacity-40"
+              >
+                ›
+              </button>
+            </nav>
+          )}
         </div>
       ) : view === "members" ? (
         <div className="mx-auto w-full max-w-xl p-6">

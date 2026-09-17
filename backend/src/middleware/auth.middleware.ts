@@ -1,18 +1,19 @@
 import { NextFunction, Request, Response } from "express";
+import { ParamsFlatDictionary } from "express-serve-static-core";
 import jwt from "jsonwebtoken";
 
-export interface AuthRequest extends Request {
+// Express 5 tipa req.params como `string | string[]` por padrão (rotas com
+// wildcard/segmento repetido podem produzir array) — nenhuma rota daqui usa
+// isso, são todas `:id`/`:memberId` simples, então fixamos o parâmetro de
+// tipo em `ParamsFlatDictionary` (sempre string) pra não precisar de um
+// type assertion em cada controller que lê req.params.
+export interface AuthRequest extends Request<ParamsFlatDictionary> {
   userId?: string;
 }
 
 /**
  * Middleware de autenticação: espera um header
  * `Authorization: Bearer <token>` com um JWT válido.
- *
- * TODO: implementar a verificação de fato.
- * Dica: jwt.verify(token, process.env.JWT_SECRET!) retorna o payload
- * (você vai precisar ter colocado { userId } no payload ao assinar o
- * token em auth.controller.ts).
  */
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
