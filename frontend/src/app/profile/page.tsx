@@ -8,6 +8,7 @@ import {
   User,
   changePassword,
   getMe,
+  handleAuthError,
   hasToken,
   removeAvatar,
   updateAvatar,
@@ -95,10 +96,7 @@ export default function ProfilePage() {
         setName(user.name);
       })
       .catch((err) => {
-        if (err instanceof ApiError && err.status === 401) {
-          router.replace("/");
-          return;
-        }
+        if (handleAuthError(err, router)) return;
         setLoadError("Não foi possível carregar seu perfil. Verifique sua conexão.");
       })
       .finally(() => setLoading(false));

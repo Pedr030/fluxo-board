@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   DndContext,
@@ -31,6 +32,7 @@ import {
   deleteLabel as apiDeleteLabel,
   getBoard,
   getMe,
+  handleAuthError,
   inviteMember as apiInviteMember,
   listActivity,
   listMembers,
@@ -267,6 +269,7 @@ function LabelColumn({
 }
 
 export function Board({ boardId }: { boardId: string }) {
+  const router = useRouter();
   const [lists, setLists] = useState<ListData[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -342,6 +345,7 @@ export function Board({ boardId }: { boardId: string }) {
         currentUserIdRef.current = user.id;
       })
       .catch((err) => {
+        if (handleAuthError(err, router)) return;
         if (err instanceof ApiError && err.status === 403) {
           setLoadError("Você não é membro deste board.");
         } else if (err instanceof ApiError && err.status === 404) {

@@ -1,6 +1,8 @@
 import request from "supertest";
+import jwt from "jsonwebtoken";
 import { buildApp, resetDb } from "./helpers";
 import { prisma } from "../prisma";
+import { TOKEN_TTL_MS } from "../lib/jwt";
 
 const app = buildApp();
 
@@ -99,5 +101,44 @@ describe("requireAuth (middleware)", () => {
 
     const res = await request(app).get("/boards").set("Authorization", `Bearer ${body.token}`);
     expect(res.status).toBe(200);
+  });
+});
+
+describe("requireAuth — sessão deslizante", () => {
+  it("reemite o token (header X-Refreshed-Token) quando já passou da metade da validade", async () => {
+    const { body } = await request(app)
+      .post("/auth/register")
+      .send({ name: "Ana", email: "ana@teste.com", password: "senha123" });
+
+    // Bem menos que metade de TOKEN_TTL_MS (7 dias) — força o reemite.
+    const nearExpiryToken = jwt.sign({ userId: body.user.id }, process.env.JWT_SECRET!, {
+      expiresIn: "1h",
+    });
+
+    const res = await request(app).get("/boards").set("Authorization", `Bearer ${nearExpiryToken}`);
+
+    expect(res.status).toBe(200);
+    const refreshed = res.headers["x-refreshed-token"];
+    expect(refreshed).toEqual(expect.any(String));
+    expect(refreshed).not.toBe(nearExpiryToken);
+
+    const decoded = jwt.verify(refreshed, process.env.JWT_SECRET!) as {
+      userId: string;
+      exp: number;
+    };
+    expect(decoded.userId).toBe(body.user.id);
+    // Prazo renovado (~7 dias), não os minutos que sobravam do token antigo.
+    expect(decoded.exp * 1000 - Date.now()).toBeGreaterThan(TOKEN_TTL_MS - 60_000);
+  });
+
+  it("não reemite quando o token ainda tem mais da metade da validade", async () => {
+    const { body } = await request(app)
+      .post("/auth/register")
+      .send({ name: "Ana", email: "ana@teste.com", password: "senha123" });
+
+    const res = await request(app).get("/boards").set("Authorization", `Bearer ${body.token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.headers["x-refreshed-token"]).toBeUndefined();
   });
 });
