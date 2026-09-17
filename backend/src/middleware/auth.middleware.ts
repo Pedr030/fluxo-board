@@ -1,7 +1,13 @@
 import { NextFunction, Request, Response } from "express";
+import { ParamsFlatDictionary } from "express-serve-static-core";
 import jwt from "jsonwebtoken";
 
-export interface AuthRequest extends Request {
+// Express 5 tipa req.params como `string | string[]` por padrão (rotas com
+// wildcard/segmento repetido podem produzir array) — nenhuma rota daqui usa
+// isso, são todas `:id`/`:memberId` simples, então fixamos o parâmetro de
+// tipo em `ParamsFlatDictionary` (sempre string) pra não precisar de um
+// type assertion em cada controller que lê req.params.
+export interface AuthRequest extends Request<ParamsFlatDictionary> {
   userId?: string;
 }
 
