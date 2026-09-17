@@ -222,6 +222,13 @@ pra próxima, o que ajuda demais quando você tá pareando com o Claude Code
 - ~~Paginação do histórico de atividade~~ — feito (antes cortava
   silenciosamente nas últimas 100 entradas; agora pagina de verdade,
   com página numerada no frontend)
+- ~~CI rodando também em push na `development`~~ — feito (antes só
+  disparava em push/PR pra `main`, então commits acumulados na
+  `development` ficavam sem checagem nenhuma até a hora do PR)
+- ~~Testes automatizados no frontend~~ — feito (Jest via `next/jest`,
+  cobertura de lógica pura: regra de `restricted`, reindexação do
+  drag-and-drop, formatação de data — sem renderizar componente nem
+  precisar de jsdom)
 
 ## 7. Autenticação — detalhes
 

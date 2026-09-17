@@ -75,7 +75,7 @@ const ACTIVITY_PAGE_SIZE = 50;
  * última, e uma janela em volta da página atual, em vez de uma barra
  * gigante quando o histórico tem dezenas de páginas.
  */
-function getActivityPageNumbers(current: number, total: number): (number | "…")[] {
+export function getActivityPageNumbers(current: number, total: number): (number | "…")[] {
   if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
   const keep = new Set([1, 2, total - 1, total, current - 1, current, current + 1]);
   const sorted = [...keep].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
@@ -98,7 +98,7 @@ function formatActivityTime(iso: string): string {
   });
 }
 
-function moveCardInLists(
+export function moveCardInLists(
   lists: ListData[],
   cardId: string,
   toListId: string,
