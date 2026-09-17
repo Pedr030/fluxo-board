@@ -281,6 +281,7 @@ export function Board({ boardId }: { boardId: string }) {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteStatus, setInviteStatus] = useState<{ ok: boolean; message: string } | null>(null);
   const [inviting, setInviting] = useState(false);
+  const [invitePickerOpen, setInvitePickerOpen] = useState(false);
   const [myRole, setMyRole] = useState<Role | null>(null);
   const [myRestricted, setMyRestricted] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -1105,6 +1106,58 @@ export function Board({ boardId }: { boardId: string }) {
         </div>
       ) : view === "members" ? (
         <div className="mx-auto w-full max-w-xl p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="font-display text-lg font-semibold text-ink">Membros</h2>
+            {(myRole === "OWNER" || myRole === "ADMIN") && (
+              <div className="relative">
+                <button
+                  onClick={() => setInvitePickerOpen((v) => !v)}
+                  className="rounded-card bg-flow-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-flow-600"
+                >
+                  Convidar
+                </button>
+                {invitePickerOpen && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setInvitePickerOpen(false)} />
+                    <div
+                      className="absolute right-0 top-full z-20 mt-2 w-72 rounded-card border border-surface-border bg-surface p-3 shadow-card"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <p className="mb-2 text-xs font-medium text-ink-soft">Convidar por email</p>
+                      <form onSubmit={handleInvite} className="flex flex-col gap-2">
+                        <input
+                          type="email"
+                          autoFocus
+                          className="rounded-card border border-surface-border bg-surface p-2.5 text-sm text-ink outline-none transition-colors focus:border-brand-500"
+                          placeholder="email@exemplo.com"
+                          value={inviteEmail}
+                          onChange={(e) => setInviteEmail(e.target.value)}
+                        />
+                        <button
+                          type="submit"
+                          disabled={inviting}
+                          className="rounded-card bg-flow-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-flow-600 disabled:opacity-60"
+                        >
+                          {inviting ? "Convidando..." : "Convidar"}
+                        </button>
+                      </form>
+                      {inviteStatus && (
+                        <p
+                          className={`mt-2 text-xs ${
+                            inviteStatus.ok
+                              ? "text-flow-600 dark:text-flow-400"
+                              : "text-red-600 dark:text-red-400"
+                          }`}
+                        >
+                          {inviteStatus.message}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
           <ul className="flex flex-col gap-3">
             {members.map((m) => {
               const roleLabel = m.role === "OWNER" ? "Dono" : m.role === "ADMIN" ? "Admin" : "Membro";
@@ -1119,9 +1172,21 @@ export function Board({ boardId }: { boardId: string }) {
                   key={m.id}
                   className="flex flex-wrap items-center justify-between gap-3 rounded-card border border-surface-border bg-surface p-4 text-base shadow-card"
                 >
-                  <div className="min-w-0">
-                    <p className="font-medium text-ink">{m.user.name}</p>
-                    <p className="text-sm text-ink-soft">{m.user.email}</p>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <Avatar
+                      name={m.user.name}
+                      avatarUrl={m.user.avatarUrl}
+                      className="h-11 w-11 shrink-0 text-base"
+                    />
+                    <div className="min-w-0">
+                      <p className="flex items-center gap-1.5 truncate font-medium text-ink">
+                        <span className="truncate">{m.user.name}</span>
+                        {m.user.id === currentUserId && (
+                          <span className="shrink-0 text-xs font-normal text-ink-soft">(você)</span>
+                        )}
+                      </p>
+                      <p className="truncate text-sm text-ink-soft">{m.user.email}</p>
+                    </div>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {m.restricted && (
@@ -1157,34 +1222,6 @@ export function Board({ boardId }: { boardId: string }) {
           </ul>
           {memberActionError && (
             <p className="mt-2 text-sm text-red-600 dark:text-red-400">{memberActionError}</p>
-          )}
-
-          {(myRole === "OWNER" || myRole === "ADMIN") && (
-            <form onSubmit={handleInvite} className="mt-5 flex gap-3">
-              <input
-                type="email"
-                className="flex-1 rounded-card border border-surface-border bg-surface p-3 text-base text-ink outline-none transition-colors focus:border-brand-500"
-                placeholder="Convidar por email"
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-              />
-              <button
-                type="submit"
-                disabled={inviting}
-                className="rounded-card bg-flow-500 px-4 text-base font-medium text-white transition-colors hover:bg-flow-600 disabled:opacity-60"
-              >
-                Convidar
-              </button>
-            </form>
-          )}
-          {inviteStatus && (
-            <p
-              className={`mt-2 text-xs ${
-                inviteStatus.ok ? "text-flow-600 dark:text-flow-400" : "text-red-600 dark:text-red-400"
-              }`}
-            >
-              {inviteStatus.message}
-            </p>
           )}
         </div>
       ) : view === "labels" ? (
